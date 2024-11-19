@@ -18,8 +18,3 @@ Gradescope file} \item{canvas}{Path to the Canvas file}
 Searches the specified directory for required files related to exam
 processing: Gradescope, Canvas, and Arrangements files.
 }
-\examples{
-\dontrun{
-files <- find_docs("path/to/directory")
-}
-}

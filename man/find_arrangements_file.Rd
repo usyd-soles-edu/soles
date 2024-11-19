@@ -23,12 +23,3 @@ The function looks for CSV files containing the required columns:
 'extension_in_calendar_days' and 'u_outcome_type'. It will return the path
 to the first file that matches these criteria.
 }
-\examples{
-\dontrun{
-# Search in current directory
-file_path <- find_arrangements_file()
-
-# Search in specific directory
-file_path <- find_arrangements_file("path/to/directory")
-}
-}

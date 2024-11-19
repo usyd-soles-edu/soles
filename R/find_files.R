@@ -43,6 +43,7 @@ find_gradescope_file <- function(dir = NULL) {
 #' @param dir Character string specifying the directory to search. If NULL
 #'   (default), the current working directory is used.
 #'
+#' @importFrom readr read_csv
 #' @export
 find_canvas_file <- function(dir = NULL) {
   current_dir <- if (is.null(dir)) getwd() else dir
@@ -66,10 +67,10 @@ find_canvas_file <- function(dir = NULL) {
 }
 
 
-#' Find Arrangements CSV File
+#' Find Special Arrangements CSV File
 #'
 #' This function searches for a CSV file in the specified directory that
-#' contains required columns for arrangements data analysis.
+#' contains required columns for special arrangements data analysis.
 #'
 #' @param dir Character string specifying the directory path to search. If NULL
 #'   (default), uses current working directory.
@@ -84,7 +85,7 @@ find_canvas_file <- function(dir = NULL) {
 #' @importFrom readr read_csv
 #'
 #' @export
-find_arrangements_file <- function(dir = NULL) {
+find_spec_cons_file <- function(dir = NULL) {
   current_dir <- if (is.null(dir)) getwd() else dir
   files <- list.files(path = current_dir, pattern = "*.csv")
   if (length(files) == 0) {
@@ -118,11 +119,11 @@ find_arrangements_file <- function(dir = NULL) {
 find_docs <- function(directory) {
   gradescope <- find_gradescope_file(directory)
   canvas <- find_canvas_file(directory)
-  arrangements <- find_arrangements_file(directory)
+  arrangements <- find_spec_cons_file(directory)
   cat("Found required files:\n")
   cat("  - Gradescope:", gradescope, "\n")
   cat("  - Canvas:", canvas, "\n")
-  cat("  - Arrangements:", arrangements, "\n")
+  cat("  - Special arrangements:", arrangements, "\n")
   return(list(
     gradescope = gradescope,
     canvas = canvas,

@@ -23,10 +23,3 @@ recent one (based on filename).
 If multiple matching files are found, a warning is issued and the most
 recent file (by filename) is used.
 }
-\examples{
-# Search in current directory
-gradescope_file <- find_gradescope_file()
-
-# Search in specific directory
-gradescope_file <- find_gradescope_file("path/to/directory")
-}
