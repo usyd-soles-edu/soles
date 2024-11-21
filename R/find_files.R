@@ -124,9 +124,11 @@ find_docs <- function(directory) {
   cat("  - Gradescope:", gradescope, "\n")
   cat("  - Canvas:", canvas, "\n")
   cat("  - Special arrangements:", arrangements, "\n")
-  return(list(
-    gradescope = gradescope,
-    canvas = canvas,
-    arrangements = arrangements
+  return(invisible(
+    list(
+      gradescope = gradescope,
+      canvas = canvas,
+      arrangements = arrangements
+    )
   ))
 }
