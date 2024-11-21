@@ -93,7 +93,10 @@ find_spec_cons_file <- function(dir = NULL) {
   }
   for (file in files) {
     cols <- suppressWarnings(suppressMessages(
-      readr::read_csv(file.path(current_dir, file), n_max = 0, show_col_types = FALSE)
+      readr::read_csv(file.path(current_dir, file),
+        n_max = 0,
+        show_col_types = FALSE
+      )
     )) |>
       names()
     required_cols <- c("extension_in_calendar_days", "u_outcome_type")
