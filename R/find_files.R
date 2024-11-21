@@ -53,7 +53,7 @@ find_canvas_file <- function(dir = NULL) {
   if (length(canvas_files) == 0) {
     stop("No Canvas export files found in directory")
   } else if (length(canvas_files) > 1) {
-    warning("Multiple Canvas files found. Using most recent file.")
+    message("Multiple Canvas files found. Using most recent file.")
     canvas_files <- sort(canvas_files, decreasing = TRUE)[1]
   }
   file_path <- file.path(current_dir, canvas_files[1])
