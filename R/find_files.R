@@ -1,4 +1,4 @@
-#' Find Gradescope Export File
+#' Find Gradescope export File
 #'
 #' Searches for and validates a Gradescope export file in the specified
 #' directory. If multiple files are found, it uses the most
@@ -41,7 +41,7 @@ find_gradescope_file <- function(dir = NULL) {
   return(file_path)
 }
 
-#' Find the Most Recent Canvas Export File
+#' Find Canvas export file
 #'
 #' @description Searches a directory for Canvas grade export files (CSV) and
 #' returns the path to the most recent file. The function validates that the
@@ -78,10 +78,11 @@ find_canvas_file <- function(dir = NULL) {
 }
 
 
-#' Find Special Arrangements CSV File
+#' Find special considerations/arrangements file
 #'
-#' This function searches for a CSV file in the specified directory that
-#' contains required columns for special arrangements data analysis.
+#' The special considerations/arrangements file is a CSV file that contains
+#' information about special considerations/arrangements for students. At USYD
+#' this can be downloaded from the UOS dashboard.
 #'
 #' @param dir Character string specifying the directory path to search. If NULL
 #'   (default), uses current working directory.
@@ -129,7 +130,7 @@ find_spec_cons_file <- function(dir = NULL) {
   return(file.path(current_dir, matching_files[1]))
 }
 
-#' Find Required Files for Exam Processing
+#' Find all documents
 #'
 #' Searches the specified directory for required files related to exam
 #' processing: Gradescope, Canvas, and Arrangements files.
