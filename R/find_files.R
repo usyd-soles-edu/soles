@@ -18,7 +18,10 @@
 #' @export
 find_gradescope_file <- function(dir = NULL) {
   current_dir <- if (is.null(dir)) getwd() else dir
-  files <- list.files(path = current_dir, pattern = ".*_scores\\.(csv|xlsx|xls)$")
+  files <- list.files(
+    path = current_dir,
+    pattern = ".*_scores\\.(csv|xlsx|xls)$"
+  )
   if (length(files) == 0) {
     stop("No Gradescope export files found in directory")
   } else if (length(files) > 1) {
@@ -26,7 +29,11 @@ find_gradescope_file <- function(dir = NULL) {
     files <- sort(files, decreasing = TRUE)[1]
   }
   file_path <- file.path(current_dir, files[1])
-  cols <- readr::read_csv(file_path, n_max = 0, show_col_types = FALSE) |>
+  cols <- readr::read_csv(
+    file_path,
+    n_max = 0,
+    show_col_types = FALSE
+  ) |>
     names()
   if (!all(c("View Count", "Submission Count") %in% cols)) {
     stop("File does not appear to be a Gradescope export")
@@ -57,11 +64,15 @@ find_canvas_file <- function(dir = NULL) {
     canvas_files <- sort(canvas_files, decreasing = TRUE)[1]
   }
   file_path <- file.path(current_dir, canvas_files[1])
-  cols <- readr::read_csv(file_path, n_max = 0, show_col_types = FALSE) |>
+  cols <- readr::read_csv(
+    file_path,
+    n_max = 0,
+    show_col_types = FALSE
+  ) |>
     names()
   required_cols <- c("SIS User ID", "SIS Login ID")
   if (!all(required_cols %in% cols)) {
-    stop("File does not appear to be a Canvas export (missing expected columns)")
+    stop("File does not appear to be a Canvas export (missing columns)")
   }
   return(file_path)
 }
