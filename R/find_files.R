@@ -75,12 +75,12 @@ find_canvas_file <- function(dir = NULL) {
 #' @param dir Character string specifying the directory path to search. If NULL
 #'   (default), uses current working directory.
 #'
-#' @return A character string containing the full file path to the first CSV
+#' @return A character string containing the full file path to the most recent CSV
 #'   file that contains all required columns.
 #'
 #' @details The function looks for CSV files containing the required columns:
 #'   'extension_in_calendar_days' and 'u_outcome_type'. It will return the path
-#'   to the first file that matches these criteria.
+#'   to the most recent file that matches these criteria.
 #'
 #' @importFrom readr read_csv
 #'
@@ -91,9 +91,11 @@ find_spec_cons_file <- function(dir = NULL) {
   if (length(files) == 0) {
     stop("No CSV files found in directory")
   }
+  matching_files <- character(0)
   for (file in files) {
     cols <- suppressWarnings(suppressMessages(
-      readr::read_csv(file.path(current_dir, file),
+      readr::read_csv(
+        file.path(current_dir, file),
         n_max = 0,
         show_col_types = FALSE
       )
@@ -101,10 +103,19 @@ find_spec_cons_file <- function(dir = NULL) {
       names()
     required_cols <- c("extension_in_calendar_days", "u_outcome_type")
     if (all(required_cols %in% cols)) {
-      return(file.path(current_dir, file))
+      matching_files <- c(matching_files, file)
     }
   }
-  stop("No special considerations file found (missing expected columns)")
+  if (length(matching_files) == 0) {
+    stop("No special considerations file found (missing expected columns)")
+  }
+  if (length(matching_files) > 1) {
+    message(
+      "Multiple special considerations files found. Using most recent file."
+    )
+    matching_files <- sort(matching_files, decreasing = TRUE)[1]
+  }
+  return(file.path(current_dir, matching_files[1]))
 }
 
 #' Find Required Files for Exam Processing
