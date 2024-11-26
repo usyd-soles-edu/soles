@@ -80,80 +80,59 @@ find_canvas_file <- function(dir = NULL) {
 
 #' Find special considerations/arrangements file
 #'
-#' The special considerations/arrangements file is a CSV file that contains
-#' information about special considerations/arrangements for students. At USYD
-#' this can be downloaded from the UOS dashboard.
-#'
 #' @param dir Character string specifying the directory path to search. If NULL
 #'   (default), uses current working directory.
-#'
-#' @return A character string containing the full file path to the most recent CSV
-#'   file that contains all required columns.
-#'
-#' @details The function looks for CSV files containing the required columns:
-#'   'extension_in_calendar_days' and 'u_outcome_type'. It will return the path
-#'   to the most recent file that matches these criteria.
-#'
-#' @import logger
+#' @return Character string with full file path to most recent arrangements file
 #' @importFrom readr read_csv
 #' @importFrom lubridate dmy_hms
 #' @importFrom dplyr pull
-#'
 #' @export
 find_spec_cons_file <- function(dir = NULL) {
-  if (is.null(dir)) {
-    dir <- getwd()
-  }
-  # get names of all csv files in list
-  logger::log_debug("Searching for CSV files in directory")
-  files <- list.files(path = dir, pattern = "*.csv")
-  logger::log_debug("Files found:")
-  for (file in files) {
-    logger::log_debug(paste("  ", file))
-  }
-  # if no csv files found, stop
+  current_dir <- if (is.null(dir)) getwd() else dir
+
+  # Find all CSV files
+  files <- list.files(path = current_dir, pattern = "*.csv")
   if (length(files) == 0) {
     stop("No CSV files found in directory")
   }
-  # match files that have columns "extension_in_calendar_days" and "u_outcome_type"
+
+  # Check which files have required columns
+  required_cols <- c("extension_in_calendar_days", "u_outcome_type")
   matching_files <- character(0)
+
   for (file in files) {
-    cols <- suppressWarnings(suppressMessages(
+    cols <- suppressMessages(
       readr::read_csv(
-        file.path(dir, file),
+        file.path(current_dir, file),
         n_max = 0,
         show_col_types = FALSE
-      )
-    )) |>
-      names()
-    required_cols <- c("extension_in_calendar_days", "u_outcome_type")
+      ) |> names()
+    )
     if (all(required_cols %in% cols)) {
       matching_files <- c(matching_files, file)
-      matching_files
     }
   }
-  # print matching files
-  logger::log_debug("Matching files:")
-  for (file in matching_files) {
-    logger::log_debug(paste("  ", file))
-  }
-  # pick most recent file if multiple files found, use date created
+
   if (length(matching_files) == 0) {
     stop("No special considerations file found (missing expected columns)")
   }
+
+  # Get most recent file if multiple found
   if (length(matching_files) > 1) {
-    message(
-      "Multiple special considerations files found. Using most recent file."
-    )
+    message("Multiple special considerations files found. Using most recent file.")
     file_dates <- sapply(matching_files, function(file) {
-      readr::read_csv(file.path(dir, file), show_col_types = FALSE) |>
+      readr::read_csv(
+        file.path(current_dir, file),
+        show_col_types = FALSE
+      ) |>
         dplyr::pull("sys_updated_on") |>
         lubridate::dmy_hms() |>
         max()
     })
-    most_recent_file <- matching_files[which.max(file_dates)]
-    return(file.path(dir, most_recent_file))
+    matching_files <- matching_files[which.max(file_dates)]
   }
+
+  return(file.path(current_dir, matching_files[1]))
 }
 
 #' Find all documents
