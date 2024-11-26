@@ -94,20 +94,33 @@ find_canvas_file <- function(dir = NULL) {
 #'   'extension_in_calendar_days' and 'u_outcome_type'. It will return the path
 #'   to the most recent file that matches these criteria.
 #'
+#' @import logger
 #' @importFrom readr read_csv
+#' @importFrom lubridate dmy_hms
+#' @importFrom dplyr pull
 #'
 #' @export
 find_spec_cons_file <- function(dir = NULL) {
-  current_dir <- if (is.null(dir)) getwd() else dir
-  files <- list.files(path = current_dir, pattern = "*.csv")
+  if (is.null(dir)) {
+    dir <- getwd()
+  }
+  # get names of all csv files in list
+  logger::log_debug("Searching for CSV files in directory")
+  files <- list.files(path = dir, pattern = "*.csv")
+  logger::log_debug("Files found:")
+  for (file in files) {
+    logger::log_debug(paste("  ", file))
+  }
+  # if no csv files found, stop
   if (length(files) == 0) {
     stop("No CSV files found in directory")
   }
+  # match files that have columns "extension_in_calendar_days" and "u_outcome_type"
   matching_files <- character(0)
   for (file in files) {
     cols <- suppressWarnings(suppressMessages(
       readr::read_csv(
-        file.path(current_dir, file),
+        file.path(dir, file),
         n_max = 0,
         show_col_types = FALSE
       )
@@ -116,8 +129,15 @@ find_spec_cons_file <- function(dir = NULL) {
     required_cols <- c("extension_in_calendar_days", "u_outcome_type")
     if (all(required_cols %in% cols)) {
       matching_files <- c(matching_files, file)
+      matching_files
     }
   }
+  # print matching files
+  logger::log_debug("Matching files:")
+  for (file in matching_files) {
+    logger::log_debug(paste("  ", file))
+  }
+  # pick most recent file if multiple files found, use date created
   if (length(matching_files) == 0) {
     stop("No special considerations file found (missing expected columns)")
   }
@@ -125,9 +145,15 @@ find_spec_cons_file <- function(dir = NULL) {
     message(
       "Multiple special considerations files found. Using most recent file."
     )
-    matching_files <- sort(matching_files, decreasing = TRUE)[1]
+    file_dates <- sapply(matching_files, function(file) {
+      readr::read_csv(file.path(dir, file), show_col_types = FALSE) |>
+        dplyr::pull("sys_updated_on") |>
+        lubridate::dmy_hms() |>
+        max()
+    })
+    most_recent_file <- matching_files[which.max(file_dates)]
+    return(file.path(dir, most_recent_file))
   }
-  return(file.path(current_dir, matching_files[1]))
 }
 
 #' Find all documents
