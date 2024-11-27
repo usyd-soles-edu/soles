@@ -17,28 +17,55 @@
 #'
 #' @export
 find_gradescope_file <- function(dir = NULL) {
-  current_dir <- if (is.null(dir)) getwd() else dir
-  files <- list.files(
-    path = current_dir,
-    pattern = ".*_scores\\.(csv|xlsx|xls)$"
-  )
+  if (is.null(dir)) {
+    dir <- getwd()
+    cat("No directory specified. Using current working directory.\n")
+  }
+  # list all files in directory
+  files <- list.files(path = dir, pattern = "\\.csv$|\\.xlsx$|\\.xls$")
   if (length(files) == 0) {
-    stop("No Gradescope export files found in directory")
-  } else if (length(files) > 1) {
-    warning("Multiple Gradescope files found. Using most recent file.")
-    files <- sort(files, decreasing = TRUE)[1]
+    stop("No files found in directory")
   }
-  file_path <- file.path(current_dir, files[1])
-  cols <- readr::read_csv(
-    file_path,
-    n_max = 0,
-    show_col_types = FALSE
-  ) |>
-    names()
-  if (!all(c("View Count", "Submission Count") %in% cols)) {
-    stop("File does not appear to be a Gradescope export")
+  # check which files have required columns
+  required_cols <- c("Submission ID", "Submission Time")
+  matching_files <- character(0)
+  for (file in files) {
+    cols <- suppressMessages(
+      readr::read_csv(
+        file.path(dir, file),
+        n_max = 0,
+        show_col_types = FALSE
+      ) |> names()
+    )
+    if (all(required_cols %in% cols)) {
+      matching_files <- c(matching_files, file)
+    }
   }
-  return(file_path)
+  if (length(matching_files) == 0) {
+    stop("No Gradescope file found (missing expected columns)")
+  }
+  if (length(matching_files) > 1) {
+    message("Multiple Gradescope files found. Using most recent file.")
+    file_times <- sapply(matching_files, function(file) {
+      suppressWarnings(
+        readr::read_csv(file.path(dir, file), show_col_types = FALSE) |>
+          select("Submission Time") |>
+          mutate(across(
+            "Submission Time",
+            ~ lubridate::parse_date_time(.,
+              "YmdHMSz",
+              tz = "Australia/Sydney",
+              quiet = TRUE
+            )
+          )) |>
+          drop_na() |>
+          pull() |>
+          max()
+      )
+    })
+    matching_files <- matching_files[which.max(file_times)]
+  }
+  return(file.path(dir, matching_files))
 }
 
 #' Find Canvas export file
