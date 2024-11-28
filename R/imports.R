@@ -11,5 +11,7 @@ NULL
 #' - lubridate: For date/time handling
 #'
 #' @name soles-package
-#' @docType package
-NULL
+"_PACKAGE"
+
+# For info, check:
+# https://github.com/tidyverse/tibble/blob/main/R/tibble-package.R#L62
