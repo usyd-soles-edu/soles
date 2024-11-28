@@ -14,6 +14,8 @@
 #'   recent file (by filename) is used.
 #'
 #' @importFrom readr read_csv
+#' @importFrom lubridate parse_date_time dmy_hms
+#' @importFrom dplyr select mutate across pull drop_na
 #'
 #' @export
 find_gradescope_file <- function(dir = NULL) {
@@ -31,7 +33,7 @@ find_gradescope_file <- function(dir = NULL) {
   matching_files <- character(0)
   for (file in files) {
     cols <- suppressMessages(
-      readr::read_csv(
+      read_csv(
         file.path(dir, file),
         n_max = 0,
         show_col_types = FALSE
@@ -48,7 +50,7 @@ find_gradescope_file <- function(dir = NULL) {
     message("Multiple Gradescope files found. Using most recent file.")
     file_times <- sapply(matching_files, function(file) {
       suppressWarnings(
-        readr::read_csv(file.path(dir, file), show_col_types = FALSE) |>
+        read_csv(file.path(dir, file), show_col_types = FALSE) |>
           select("Submission Time") |>
           mutate(across(
             "Submission Time",
@@ -78,6 +80,7 @@ find_gradescope_file <- function(dir = NULL) {
 #'   (default), the current working directory is used.
 #'
 #' @importFrom readr read_csv
+#'
 #' @export
 find_canvas_file <- function(dir = NULL) {
   current_dir <- if (is.null(dir)) getwd() else dir
@@ -91,7 +94,7 @@ find_canvas_file <- function(dir = NULL) {
     canvas_files <- sort(canvas_files, decreasing = TRUE)[1]
   }
   file_path <- file.path(current_dir, canvas_files[1])
-  cols <- readr::read_csv(
+  cols <- read_csv(
     file_path,
     n_max = 0,
     show_col_types = FALSE
@@ -110,9 +113,11 @@ find_canvas_file <- function(dir = NULL) {
 #' @param dir Character string specifying the directory path to search. If NULL
 #'   (default), uses current working directory.
 #' @return Character string with full file path to most recent arrangements file
+#'
 #' @importFrom readr read_csv
 #' @importFrom lubridate dmy_hms
-#' @importFrom dplyr pull
+#' @importFrom dplyr pull select across mutate
+#'
 #' @export
 find_spec_cons_file <- function(dir = NULL) {
   current_dir <- if (is.null(dir)) getwd() else dir
@@ -148,12 +153,12 @@ find_spec_cons_file <- function(dir = NULL) {
   if (length(matching_files) > 1) {
     message("Multiple special considerations files found. Using most recent file.")
     file_dates <- sapply(matching_files, function(file) {
-      readr::read_csv(
+      read_csv(
         file.path(current_dir, file),
         show_col_types = FALSE
       ) |>
-        dplyr::pull("sys_updated_on") |>
-        lubridate::dmy_hms() |>
+        pull("sys_updated_on") |>
+        dmy_hms() |>
         max()
     })
     matching_files <- matching_files[which.max(file_dates)]
