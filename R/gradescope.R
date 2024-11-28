@@ -15,7 +15,8 @@
 #'
 #' @importFrom readr read_csv
 #' @importFrom lubridate parse_date_time dmy_hms
-#' @importFrom dplyr select mutate across pull drop_na
+#' @importFrom dplyr select mutate across pull
+#' @importFrom tidyr drop_na
 #'
 #' @export
 find_gradescope_file <- function(dir = NULL) {
