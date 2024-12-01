@@ -32,11 +32,6 @@ read_canvas_data <- function(x, col_names) {
 #' @return Vector of selected column names
 #' @keywords internal
 prompt_user_for_columns <- function(choose) {
-  cat("A list of assessments will be provided. You will be asked to select the
-  columns that correspond to the assessments you would like to process.
-  Press Enter to continue...\n")
-  readline()
-
   cat("Available columns:\n")
   for (i in seq_along(choose)) {
     cat(sprintf("%d: %s\n", i, choose[i]))
