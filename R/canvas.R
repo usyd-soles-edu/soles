@@ -2,10 +2,12 @@
 #'
 #' @description Searches a directory for Canvas grade export files (CSV) and
 #' returns the path to the most recent file. The function validates that the
-#' file contains expected Canvas columns.
+#' file contains required Canvas columns ("SIS User ID" and "SIS Login ID").
 #'
 #' @param dir Character string specifying the directory to search. If NULL
 #'   (default), the current working directory is used.
+#' @return Character string containing the path to the most recent Canvas
+#'   export file
 #'
 #' @importFrom readr read_csv
 #'
@@ -37,9 +39,17 @@ find_canvas_file <- function(dir = NULL) {
 
 #' Parse Canvas export file
 #'
+#' @description Reads a Canvas export file and returns a data frame containing
+#' student information and assessment marks. Automatically excludes standard
+#' Canvas administrative columns and renames key identifiers.
+#'
 #' @param x Path to Canvas export file
-#' @param cols Optional vector of column indices to select
-#' @return A data frame containing parsed Canvas data
+#' @param cols Deprecated. This parameter no longer has any effect.
+#' @return A data frame containing:
+#'   \item{Student}{Student name}
+#'   \item{SID}{Student ID}
+#'   \item{Unikey}{USYD Unikey}
+#'   \item{...}{All remaining assessment columns}
 #' @importFrom readr read_csv
 #' @importFrom dplyr select rename all_of
 #' @export
