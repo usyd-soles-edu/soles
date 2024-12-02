@@ -94,20 +94,19 @@ read_spec_cons_data <- function(x, uos, year) {
 #' @keywords internal
 select_outcome_type <- function(df) {
   unique_outcomes <- unique(df$u_outcome_type)
-  cat("Select the outcome type to process:\n")
-  for (i in seq_along(unique_outcomes)) {
-    cat(sprintf("%d: %s\n", i, unique_outcomes[i]))
+  replacement_outcomes <- unique_outcomes[grepl("Replacement exam", unique_outcomes, ignore.case = TRUE)]
+  if (length(replacement_outcomes) == 0) {
+    stop("No replacement exam outcomes found")
   }
-  outcome_idx <- as.numeric(readline("Enter the number: "))
-  unique_outcomes[outcome_idx]
+  replacement_outcomes
 }
 
 #' Filter special considerations data
 #' @keywords internal
-filter_spec_cons <- function(df, outcome) {
+filter_spec_cons <- function(df, outcomes) {
   dplyr::filter(
     df,
-    state == "Approved" & u_outcome_type == outcome |
+    state == "Approved" & u_outcome_type %in% outcomes |
       (state == "Pending" & is.na(u_outcome_type))
   )
 }
