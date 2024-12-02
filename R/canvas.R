@@ -53,14 +53,8 @@ parse_canvas <- function(x, cols = NULL) {
     "Final Score", "Unposted Final Score"
   )
 
-  choose <- col_names[!col_names %in% c(keep, throw)]
-  selected_cols <- if (!is.null(cols)) {
-    choose[cols]
-  } else {
-    prompt_user_for_columns(choose)
-  }
-
-  display_selected_columns(selected_cols)
+  # Automatically select remaining columns
+  selected_cols <- col_names[!col_names %in% c(keep, throw)]
 
   raw_marks <- canvas_df |>
     dplyr::select(dplyr::all_of(c(keep, selected_cols))) |>
