@@ -4,7 +4,7 @@
 \alias{filter_spec_cons}
 \title{Filter special considerations data}
 \usage{
-filter_spec_cons(df, outcome)
+filter_spec_cons(df, outcomes)
 }
 \description{
 Filter special considerations data

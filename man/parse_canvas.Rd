@@ -9,11 +9,19 @@ parse_canvas(x, cols = NULL)
 \arguments{
 \item{x}{Path to Canvas export file}
 
-\item{cols}{Optional vector of column indices to select}
+\item{cols}{Deprecated. This parameter no longer has any effect.}
 }
 \value{
-A data frame containing parsed Canvas data
+A data frame containing:
+\itemize{
+\item{Student}{Student name}
+\item{SID}{Student ID}
+\item{Unikey}{USYD Unikey}
+\item{...}{All remaining assessment columns}
+}
 }
 \description{
-Parse Canvas export file
+Reads a Canvas export file and returns a data frame containing student
+information and assessment marks. Automatically excludes standard Canvas
+administrative columns and renames key identifiers.
 }

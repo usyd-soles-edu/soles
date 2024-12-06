@@ -10,8 +10,12 @@ find_canvas_file(dir = NULL)
 \item{dir}{Character string specifying the directory to search. If NULL
 (default), the current working directory is used.}
 }
+\value{
+Character string containing the path to the most recent Canvas
+export file
+}
 \description{
-Searches a directory for Canvas grade export files (CSV) and
-returns the path to the most recent file. The function validates that the
-file contains expected Canvas columns.
+Searches a directory for Canvas grade export files (CSV) and returns the path
+to the most recent file. The function validates that the file contains
+required Canvas columns ("SIS User ID" and "SIS Login ID").
 }
