@@ -1,8 +1,9 @@
 #' Find Canvas export file
 #'
-#' @description Searches a directory for Canvas grade export files (CSV) and
-#' returns the path to the most recent file. The function validates that the
-#' file contains required Canvas columns ("SIS User ID" and "SIS Login ID").
+#' @description
+#' Searches a directory for Canvas grade export files (CSV) and returns the path
+#' to the most recent file. The function validates that the file contains
+#' required Canvas columns ("SIS User ID" and "SIS Login ID").
 #'
 #' @param dir Character string specifying the directory to search. If NULL
 #'   (default), the current working directory is used.
@@ -10,7 +11,6 @@
 #'   export file
 #'
 #' @importFrom readr read_csv
-#'
 #' @export
 find_canvas_file <- function(dir = NULL) {
   current_dir <- if (is.null(dir)) getwd() else dir
@@ -39,17 +39,21 @@ find_canvas_file <- function(dir = NULL) {
 
 #' Parse Canvas export file
 #'
-#' @description Reads a Canvas export file and returns a data frame containing
-#' student information and assessment marks. Automatically excludes standard
-#' Canvas administrative columns and renames key identifiers.
+#' @description
+#' Reads a Canvas export file and returns a data frame containing student
+#' information and assessment marks. Automatically excludes standard Canvas
+#' administrative columns and renames key identifiers.
 #'
 #' @param x Path to Canvas export file
 #' @param cols Deprecated. This parameter no longer has any effect.
-#' @return A data frame containing:
+#' @return
+#' A data frame containing:
+#' \itemize{
 #'   \item{Student}{Student name}
 #'   \item{SID}{Student ID}
 #'   \item{Unikey}{USYD Unikey}
 #'   \item{...}{All remaining assessment columns}
+#' }
 #' @importFrom readr read_csv
 #' @importFrom dplyr select rename all_of
 #' @export
