@@ -62,10 +62,7 @@ parse_canvas <- function(x, cols = NULL) {
   canvas_df <- read_canvas_data(x, col_names)
 
   keep <- c("Student", "SIS User ID", "SIS Login ID")
-  throw <- c(
-    "ID", "Section", "Current Score", "Unposted Current Score",
-    "Final Score", "Unposted Final Score"
-  )
+  throw <- c("ID", "Section")
 
   # Automatically select remaining columns
   selected_cols <- col_names[!col_names %in% c(keep, throw)]
