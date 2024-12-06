@@ -47,7 +47,7 @@ create_database <- function(folder, uos = NULL, year = NULL) {
   mydocs <- find_docs(folder)
   canvas <- parse_canvas(mydocs$canvas)
   gradescope <- parse_gradescope(mydocs$gradescope)
-  sc <- parse_spec_cons(mydocs$arrangements, "BIOL2022", 2024)
+  sc <- parse_spec_cons(mydocs$arrangements, uos, year)
 
   # Join dataframes
   join_dataframes(canvas, gradescope, sc)
