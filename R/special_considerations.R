@@ -70,7 +70,8 @@ parse_spec_cons <- function(x, uos = NULL, year = NULL) {
   validate_inputs(uos, year)
   df <- read_spec_cons_data(x, uos, year)
   selected_outcome <- select_outcome_type(df)
-  out <- filter_spec_cons(df, selected_outcome)
+  out <- filter_spec_cons(df, selected_outcome) |>
+    rename(SID = `u_ticket_contact.u_student_id`)
   display_summary(out)
   return(invisible(out))
 }
