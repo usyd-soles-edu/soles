@@ -72,6 +72,7 @@ join_dataframes <- function(canvas_df, gradescope_df, spec_cons_df) {
   full_df <- canvas_df |>
     left_join(gradescope_df, by = "SID") |>
     left_join(spec_cons_df, by = "SID") |>
+    # remove duplicate/redundant columns
     select(-c(
       "First Name", "Last Name", "Status", "number", "classification",
       "availability.u_school", "assessment", "assessment.u_closing_date",
