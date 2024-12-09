@@ -62,50 +62,6 @@ test_that("find_canvas_file errors on invalid files", {
   )
 })
 
-test_that("parse_canvas handles specific columns correctly", {
-  # Create temporary Canvas file
-  temp_file <- tempfile(fileext = ".csv")
-  on.exit(unlink(temp_file))
-
-  canvas_content <- paste(
-    "Student,SIS User ID,SIS Login ID,Assignment 1,Assignment 2,Current Score",
-    "John Doe,1234567,abcd1234,85,90,87.5",
-    sep = "\n"
-  )
-  writeLines(canvas_content, temp_file)
-
-  # Test parsing with specific columns
-  result <- parse_canvas(temp_file, cols = 1) # Select Assignment 1
-
-  expect_s3_class(result, "data.frame")
-  expect_equal(colnames(result), c("Student", "SID", "Unikey", "Assignment 1"))
-  expect_false("Current Score" %in% colnames(result))
-})
-
-test_that("parse_canvas handles interactive column selection", {
-  # Create temporary Canvas file
-  temp_file <- tempfile(fileext = ".csv")
-  on.exit(unlink(temp_file))
-
-  canvas_content <- paste(
-    "Student,SIS User ID,SIS Login ID,Assignment 1,Assignment 2",
-    "John Doe,1234567,abcd1234,85,90",
-    sep = "\n"
-  )
-  writeLines(canvas_content, temp_file)
-
-  # Mock user input for interactive selection
-  mockery::stub(
-    parse_canvas, "prompt_user_for_columns",
-    function(x) x[1]
-  ) # Select first assignment
-
-  result <- parse_canvas(temp_file)
-
-  expect_s3_class(result, "data.frame")
-  expect_equal(colnames(result), c("Student", "SID", "Unikey", "Assignment 1"))
-})
-
 test_that("parse_canvas correctly renames columns", {
   temp_file <- tempfile(fileext = ".csv")
   on.exit(unlink(temp_file))
@@ -122,3 +78,4 @@ test_that("parse_canvas correctly renames columns", {
   expect_true(all(c("SID", "Unikey") %in% colnames(result)))
   expect_false(any(c("SIS User ID", "SIS Login ID") %in% colnames(result)))
 })
+

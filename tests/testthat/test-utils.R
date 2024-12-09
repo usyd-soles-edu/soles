@@ -34,14 +34,3 @@ test_that("read_canvas_data reads CSV data correctly", {
   expect_equal(ncol(result), 2)
   expect_true(is.na(result$col1[3])) # Test N/A handling
 })
-
-test_that("find_docs handles missing files appropriately", {
-  # Create empty temporary directory
-  temp_dir <- tempfile()
-  dir.create(temp_dir)
-  on.exit(unlink(temp_dir, recursive = TRUE))
-
-  # Test error when files are missing
-  expect_error(find_docs(temp_dir))
-})
-

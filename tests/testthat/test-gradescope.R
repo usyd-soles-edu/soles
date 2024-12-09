@@ -99,3 +99,37 @@ test_that("parse_gradescope handles file correctly", {
   expect_false("Extra" %in% colnames(result))
 })
 
+test_that("parse_gradescope handles different status values", {
+  temp_file <- tempfile(fileext = ".csv")
+  on.exit(unlink(temp_file))
+
+  gradescope_content <- paste(
+    "First Name,Last Name,SID,Email,Submission ID,Submission Time,Status",
+    "John,Doe,1234567,john@example.com,98765,2023-10-01 14:30:00 +1100,Active",
+    "Jane,Smith,7654321,jane@example.com,98766,2023-10-01 14:35:00 +1100,Missing",
+    sep = "\n"
+  )
+  writeLines(gradescope_content, temp_file)
+
+  result <- parse_gradescope(temp_file)
+  expect_equal(nrow(result), 2)
+  expect_equal(result$Status, c("Active", "Missing"))
+})
+
+
+test_that("parse_gradescope handles empty cells", {
+  temp_file <- tempfile(fileext = ".csv")
+  on.exit(unlink(temp_file))
+
+  gradescope_content <- paste(
+    "First Name,Last Name,SID,Email,Submission ID,Submission Time,Status",
+    "John,Doe,,john@example.com,,2023-10-01 14:30:00 +1100,",
+    sep = "\n"
+  )
+  writeLines(gradescope_content, temp_file)
+
+  result <- parse_gradescope(temp_file)
+  expect_true(is.na(result$SID))
+  expect_true(is.na(result$`Submission ID`))
+  expect_true(is.na(result$Status))
+})
