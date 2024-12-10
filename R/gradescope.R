@@ -20,16 +20,29 @@
 #'
 #' @export
 find_gradescope_file <- function(dir = NULL) {
-  if (is.null(dir)) {
-    dir <- getwd()
-    cat("No directory specified. Using current working directory.\n")
+  if (is.null(dir)) dir <- getwd()
+
+  # If dir is a file path, validate and return it directly
+  if (file.exists(dir) && !dir.exists(dir)) {
+    file_path <- dir
+    # Validate file has required columns
+    required_cols <- c("Submission ID", "Submission Time")
+    cols <- suppressMessages(
+      read_csv(file_path, n_max = 0, show_col_types = FALSE) |> names()
+    )
+    if (!all(required_cols %in% cols)) {
+      stop("File does not appear to be a Gradescope export (missing required columns)")
+    }
+    return(file_path)
   }
-  # list all files in directory
+
+  # Otherwise treat as directory and find latest file
   files <- list.files(path = dir, pattern = "\\.csv$|\\.xlsx$|\\.xls$")
   if (length(files) == 0) {
     stop("No files found in directory")
   }
-  # check which files have required columns
+
+  # Check which files have required columns
   required_cols <- c("Submission ID", "Submission Time")
   matching_files <- character(0)
   for (file in files) {
@@ -44,31 +57,31 @@ find_gradescope_file <- function(dir = NULL) {
       matching_files <- c(matching_files, file)
     }
   }
+
   if (length(matching_files) == 0) {
     stop("No Gradescope file found (missing expected columns)")
   }
-  if (length(matching_files) > 1) {
-    message("Multiple Gradescope files found. Using most recent file.")
-    file_times <- sapply(matching_files, function(file) {
-      suppressWarnings(
-        read_csv(file.path(dir, file), show_col_types = FALSE) |>
-          select("Submission Time") |>
-          mutate(across(
-            "Submission Time",
-            ~ lubridate::parse_date_time(.,
-              "YmdHMSz",
-              tz = "Australia/Sydney",
-              quiet = TRUE
-            )
-          )) |>
-          drop_na() |>
-          pull() |>
-          max()
-      )
-    })
-    matching_files <- matching_files[which.max(file_times)]
-  }
-  return(file.path(dir, matching_files))
+
+  # Get most recent file
+  file_times <- sapply(matching_files, function(file) {
+    suppressWarnings(
+      read_csv(file.path(dir, file), show_col_types = FALSE) |>
+        select("Submission Time") |>
+        mutate(across(
+          "Submission Time",
+          ~ lubridate::parse_date_time(.,
+            "YmdHMSz",
+            tz = "Australia/Sydney",
+            quiet = TRUE
+          )
+        )) |>
+        drop_na() |>
+        pull() |>
+        max()
+    )
+  })
+
+  return(file.path(dir, matching_files[which.max(file_times)]))
 }
 
 #' Parse Gradescope export file

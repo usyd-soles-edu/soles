@@ -13,17 +13,21 @@
 #' @importFrom readr read_csv
 #' @export
 find_canvas_file <- function(dir = NULL) {
-  current_dir <- if (is.null(dir)) getwd() else dir
-  files <- list.files(path = current_dir, pattern = "*.csv")
-  pattern <- "^\\d{4}-\\d{2}-\\d{2}T\\d{4}_Marks"
-  canvas_files <- files[grepl(pattern, files)]
-  if (length(canvas_files) == 0) {
-    stop("No Canvas export files found in directory")
-  } else if (length(canvas_files) > 1) {
-    message("Multiple Canvas files found. Using most recent file.")
-    canvas_files <- sort(canvas_files, decreasing = TRUE)[1]
+  if (is.null(dir)) dir <- getwd()
+
+  # If dir is a file path, validate and return it directly
+  if (file.exists(dir) && !dir.exists(dir)) {
+    file_path <- dir
+  } else {
+    # Otherwise treat as directory and find latest file
+    files <- list.files(path = dir, pattern = "*.csv")
+    pattern <- "^\\d{4}-\\d{2}-\\d{2}T\\d{4}_Marks"
+    canvas_files <- files[grepl(pattern, files)]
+    if (length(canvas_files) == 0) {
+      stop("No Canvas export files found in directory")
+    }
+    file_path <- file.path(dir, sort(canvas_files, decreasing = TRUE)[1])
   }
-  file_path <- file.path(current_dir, canvas_files[1])
   cols <- read_csv(
     file_path,
     n_max = 0,

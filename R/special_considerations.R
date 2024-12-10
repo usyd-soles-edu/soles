@@ -10,10 +10,24 @@
 #'
 #' @export
 find_spec_cons_file <- function(dir = NULL) {
-  current_dir <- if (is.null(dir)) getwd() else dir
+  if (is.null(dir)) dir <- getwd()
 
-  # Find all CSV files
-  files <- list.files(path = current_dir, pattern = "*.csv")
+  # If dir is a file path, validate and return it directly
+  if (file.exists(dir) && !dir.exists(dir)) {
+    file_path <- dir
+    # Validate file has required columns
+    required_cols <- c("extension_in_calendar_days", "u_outcome_type")
+    cols <- suppressMessages(
+      readr::read_csv(file_path, n_max = 0, show_col_types = FALSE) |> names()
+    )
+    if (!all(required_cols %in% cols)) {
+      stop("File does not appear to be a special considerations export (missing required columns)")
+    }
+    return(file_path)
+  }
+
+  # Otherwise treat as directory and find latest file
+  files <- list.files(path = dir, pattern = "*.csv")
   if (length(files) == 0) {
     stop("No CSV files found in directory")
   }
@@ -25,7 +39,7 @@ find_spec_cons_file <- function(dir = NULL) {
   for (file in files) {
     cols <- suppressMessages(
       readr::read_csv(
-        file.path(current_dir, file),
+        file.path(dir, file),
         n_max = 0,
         show_col_types = FALSE
       ) |> names()
@@ -39,22 +53,18 @@ find_spec_cons_file <- function(dir = NULL) {
     stop("No special considerations file found (missing expected columns)")
   }
 
-  # Get most recent file if multiple found
-  if (length(matching_files) > 1) {
-    message("Multiple special considerations files found. Using most recent file.")
-    file_dates <- sapply(matching_files, function(file) {
-      read_csv(
-        file.path(current_dir, file),
-        show_col_types = FALSE
-      ) |>
-        pull("sys_updated_on") |>
-        dmy_hms() |>
-        max()
-    })
-    matching_files <- matching_files[which.max(file_dates)]
-  }
+  # Get most recent file
+  file_dates <- sapply(matching_files, function(file) {
+    read_csv(
+      file.path(dir, file),
+      show_col_types = FALSE
+    ) |>
+      pull("sys_updated_on") |>
+      dmy_hms() |>
+      max()
+  })
 
-  return(file.path(current_dir, matching_files[1]))
+  return(file.path(dir, matching_files[which.max(file_dates)]))
 }
 
 #' Parse special considerations file

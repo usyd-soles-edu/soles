@@ -66,13 +66,62 @@ display_selected_columns <- function(selected_cols) {
 #'
 #' @export
 find_docs <- function(directory) {
+  # Count files of each type before selecting most recent
+  files <- list.files(path = directory, pattern = "*.csv")
+
+  # Canvas files
+  pattern <- "^\\d{4}-\\d{2}-\\d{2}T\\d{4}_Marks"
+  canvas_count <- sum(grepl(pattern, files))
+
+  # Gradescope files
+  gradescope_count <- 0
+  for (file in files) {
+    cols <- suppressMessages(
+      read_csv(
+        file.path(directory, file),
+        n_max = 0,
+        show_col_types = FALSE
+      ) |> names()
+    )
+    if (all(c("Submission ID", "Submission Time") %in% cols)) {
+      gradescope_count <- gradescope_count + 1
+    }
+  }
+
+  # Special considerations files
+  spec_cons_count <- 0
+  for (file in files) {
+    cols <- suppressMessages(
+      read_csv(
+        file.path(directory, file),
+        n_max = 0,
+        show_col_types = FALSE
+      ) |> names()
+    )
+    if (all(c("extension_in_calendar_days", "u_outcome_type") %in% cols)) {
+      spec_cons_count <- spec_cons_count + 1
+    }
+  }
+
+  # Get file paths
   gradescope <- find_gradescope_file(directory)
   canvas <- find_canvas_file(directory)
   arrangements <- find_spec_cons_file(directory)
+
+  # Display summary
   cat("Found required files:\n")
-  cat("  - Gradescope:", gradescope, "\n")
-  cat("  - Canvas:", canvas, "\n")
-  cat("  - Special arrangements:", arrangements, "\n")
+  cat("  - Gradescope:", basename(gradescope))
+  if (gradescope_count > 1) cat(" (selected most recent from", gradescope_count, "files)")
+  cat("\n")
+
+  cat("  - Canvas:", basename(canvas))
+  if (canvas_count > 1) cat(" (selected most recent from", canvas_count, "files)")
+  cat("\n")
+
+  cat("  - Special arrangements:", basename(arrangements))
+  if (spec_cons_count > 1) cat(" (selected most recent from", spec_cons_count, "files)")
+  cat("\n")
+
   return(invisible(
     list(
       gradescope = gradescope,
