@@ -91,17 +91,16 @@ find_docs <- function(directory) {
   arrangements <- find_spec_cons_file(directory)
 
   # Display summary
-  cat("Found required files:\n")
-  cat("  - Gradescope:", basename(gradescope))
-  if (gradescope_count > 1) cat(" (selected most recent from", gradescope_count, "files)")
+  cat("Gradescope:", basename(gradescope))
+  if (gradescope_count > 1) cat(" (most recent from", gradescope_count, "files)")
   cat("\n")
 
-  cat("  - Canvas:", basename(canvas))
-  if (canvas_count > 1) cat(" (selected most recent from", canvas_count, "files)")
+  cat("Canvas:", basename(canvas))
+  if (canvas_count > 1) cat(" (most recent from", canvas_count, "files)")
   cat("\n")
 
-  cat("  - Special arrangements:", basename(arrangements))
-  if (spec_cons_count > 1) cat(" (selected most recent from", spec_cons_count, "files)")
+  cat("Special arrangements:", basename(arrangements))
+  if (spec_cons_count > 1) cat(" (most recent from", spec_cons_count, "files)")
   cat("\n")
 
   return(invisible(
