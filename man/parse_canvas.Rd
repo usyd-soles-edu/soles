@@ -14,10 +14,10 @@ parse_canvas(x, cols = NULL)
 \value{
 A data frame containing:
 \itemize{
-\item{Student}{Student name}
-\item{SID}{Student ID}
-\item{Unikey}{USYD Unikey}
-\item{...}{All remaining assessment columns}
+\item Student: Student name
+\item SID: SIS User ID
+\item Unikey: SIS Login ID
+\item Remaining columns: Assessment marks
 }
 }
 \description{

@@ -52,12 +52,11 @@ find_canvas_file <- function(dir = NULL) {
 #' @param cols Deprecated. This parameter no longer has any effect.
 #' @return
 #' A data frame containing:
-#' \itemize{
-#'   \item{Student}{Student name}
-#'   \item{SID}{Student ID}
-#'   \item{Unikey}{USYD Unikey}
-#'   \item{...}{All remaining assessment columns}
-#' }
+#' - Student: Student name
+#' - SID: SIS User ID
+#' - Unikey: SIS Login ID
+#' - Remaining columns: Assessment marks
+#'
 #' @importFrom readr read_csv
 #' @importFrom dplyr select rename all_of
 #' @export
