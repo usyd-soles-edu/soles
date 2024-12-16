@@ -62,8 +62,15 @@ find_canvas_file <- function(dir = NULL) {
 #' @export
 parse_canvas <- function(x, cols = NULL) {
   col_names <- read_column_names(x)
-  canvas_df <- read_canvas_data(x, col_names)
-
+  canvas_df <-
+    suppressWarnings(
+      readr::read_csv(x,
+        skip = 3,
+        col_names = col_names,
+        na = c("N/A"),
+        show_col_types = FALSE
+      )
+    )
   keep <- c("Student", "SIS User ID", "SIS Login ID")
   throw <- c("ID", "Section")
 

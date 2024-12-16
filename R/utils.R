@@ -8,24 +8,6 @@ read_column_names <- function(x) {
   readr::read_csv(x, n_max = 0, show_col_types = FALSE) |> names()
 }
 
-#' Read Canvas data from CSV file
-#'
-#' @param x Path to CSV file
-#' @param col_names Vector of column names
-#' @return Data frame of Canvas data
-#' @importFrom readr read_csv
-#' @keywords internal
-read_canvas_data <- function(x, col_names) {
-  suppressWarnings(
-    readr::read_csv(x,
-      skip = 3,
-      col_names = col_names,
-      na = c("N/A"),
-      show_col_types = FALSE
-    )
-  )
-}
-
 #' Prompt user to select columns
 #'
 #' @param choose Vector of column names to choose from
