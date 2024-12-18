@@ -126,17 +126,7 @@ uos <- function(website_url) {
         mutate(
           Type = str_extract(Type, "^[^\\n]+"),
           Description = str_extract(Description, "^[^\n]+"),
-          Deadline = tryCatch(
-            {
-              due_date <- str_extract(Due, "(?<=Due date:).*") %>% str_trim()
-              if (is.na(due_date)) {
-                NA
-              } else {
-                dmy_hm(due_date)
-              }
-            },
-            error = function(e) NA
-          ),
+          Deadline = str_extract(Due, "(?<=Due date:).*") %>% str_trim() %>% dmy_hm(),
           Due = if_else(str_detect(Due, "\n"), str_extract(Due, "^[^\n]+"), Due)
         ) %>%
         select(-Length)
