@@ -56,7 +56,7 @@ uos <- function(website_url) {
   unit <- tryCatch(
     {
       unit_text <- webpage %>%
-        html_nodes(".b-student-site__section-title") %>%
+        html_elements(".b-student-site__section-title") %>%
         html_text() %>%
         str_trim()
 
@@ -74,7 +74,7 @@ uos <- function(website_url) {
   header_text <- tryCatch(
     {
       header <- webpage %>%
-        html_nodes("h3") %>%
+        html_elements("h3") %>%
         html_text()
 
       if (length(header) == 0) {
@@ -107,7 +107,7 @@ uos <- function(website_url) {
   assessments <- tryCatch(
     {
       tables <- webpage %>%
-        html_nodes("table") %>%
+        html_elements("table") %>%
         html_table()
 
       if (length(tables) < 3) {
