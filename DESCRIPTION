@@ -17,6 +17,6 @@ Imports:
     readxl,
     dplyr,
     tidyr,
-    lubridate
-    
-
+    lubridate,
+    huxtable,
+    rvest
