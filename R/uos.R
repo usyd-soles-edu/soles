@@ -16,10 +16,10 @@
 #'   \item assessments: Data frame of assessment tasks
 #' }
 #'
-#' @importFrom rvest read_html html_nodes html_text html_table
+#' @importFrom rvest read_html html_elements html_nodes html_text html_table
 #' @importFrom dplyr filter mutate select first
 #' @importFrom stringr str_trim str_extract str_detect
-#' @importFrom tidyr pluck
+#' @importFrom purrr pluck
 #' @importFrom huxtable hux set_bold set_all_borders set_position everywhere
 #' @importFrom lubridate dmy_hm
 #'
