@@ -42,7 +42,7 @@ uos <- function(website_url) {
     stop("Invalid URL format. Expected Sydney University unit of study URL")
   }
 
-  # Read the webpage with error handling
+  # Read the webpage
   webpage <- tryCatch(
     {
       read_html(website_url)
@@ -52,7 +52,7 @@ uos <- function(website_url) {
     }
   )
 
-  # Extract unit code and name with validation
+  # Extract unit code and name
   unit <- tryCatch(
     {
       unit_text <- webpage %>%
@@ -70,7 +70,7 @@ uos <- function(website_url) {
     }
   )
 
-  # Extract and parse header info with validation
+  # Extract and parse header info
   header_text <- tryCatch(
     {
       header <- webpage %>%
@@ -87,7 +87,7 @@ uos <- function(website_url) {
     }
   )
 
-  # Parse header components with validation
+  # Parse header components
   year <- str_extract(header_text, "\\d{4}")
   if (is.na(year)) {
     stop("Could not find academic year in header")
@@ -103,7 +103,7 @@ uos <- function(website_url) {
     stop("Could not find location information in header")
   }
 
-  # Extract and clean assessment information with validation
+  # Extract and clean assessment information
   assessments <- tryCatch(
     {
       tables <- webpage %>%
@@ -145,7 +145,6 @@ uos <- function(website_url) {
     assessments = assessments
   )
 
-  # Add class to output
   class(out) <- c("uos", "list")
   return(out)
 }
