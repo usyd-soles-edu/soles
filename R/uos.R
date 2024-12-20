@@ -53,7 +53,7 @@ uos <- function(website_url) {
   )
 
   # Extract unit code and name
-  unit <- tryCatch(
+  unit_info <- tryCatch(
     {
       unit_text <- webpage %>%
         html_elements(".b-student-site__section-title") %>%
@@ -63,7 +63,17 @@ uos <- function(website_url) {
       if (length(unit_text) == 0) {
         stop("Could not find unit code and name")
       }
-      unit_text
+
+      # Split at colon and clean
+      parts <- strsplit(unit_text, ":")[[1]]
+      if (length(parts) != 2) {
+        stop("Unit code and name not in expected format")
+      }
+
+      list(
+        code = str_trim(parts[1]),
+        title = str_trim(parts[2])
+      )
     },
     error = function(e) {
       stop("Failed to extract unit information: ", e$message)
@@ -138,7 +148,8 @@ uos <- function(website_url) {
 
   # Create results list
   out <- list(
-    unit = unit,
+    unit = unit_info$code,
+    description = unit_info$title,
     year = year,
     semester = semester,
     location = location,
@@ -175,6 +186,7 @@ summary.uos <- function(object, ...) {
         cat("\nUnit of Study Details\n")
         cat("-------------------\n")
         cat("Unit:", unit, "\n")
+        cat("Description:", description, "\n")
         cat("Year:", year, "\n")
         cat("Semester:", semester, "\n")
         cat("Location:", location, "\n\n")
