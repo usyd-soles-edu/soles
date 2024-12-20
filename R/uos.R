@@ -136,23 +136,6 @@ uos <- function(website_url) {
     }
   )
 
-  # Format table for display with error handling
-  display_table <- tryCatch(
-    {
-      if (nrow(assessments) == 0) {
-        stop("Cannot create display table: no assessment data available")
-      }
-      hux(assessments) %>%
-        set_bold(row = 1, col = everywhere, value = TRUE) %>%
-        set_all_borders(TRUE) %>%
-        set_position("left")
-    },
-    error = function(e) {
-      warning("Failed to create formatted display table: ", e$message)
-      assessments # Return raw data frame if formatting fails
-    }
-  )
-
   # Create results list
   out <- list(
     unit = unit,
@@ -162,10 +145,34 @@ uos <- function(website_url) {
     assessments = assessments
   )
 
+  # Add class to output
+  class(out) <- c("uos", "list")
+  return(out)
+}
+
+#' @export
+summary.uos <- function(object, ...) {
+  # Format table for display with error handling
+  display_table <- tryCatch(
+    {
+      if (nrow(object$assessments) == 0) {
+        stop("Cannot create display table: no assessment data available")
+      }
+      hux(object$assessments) %>%
+        set_bold(row = 1, col = everywhere, value = TRUE) %>%
+        set_all_borders(TRUE) %>%
+        set_position("left")
+    },
+    error = function(e) {
+      warning("Failed to create formatted display table: ", e$message)
+      object$assessments # Return raw data frame if formatting fails
+    }
+  )
+
   # Print formatted output with error handling
   tryCatch(
     {
-      with(out, {
+      with(object, {
         cat("\nUnit of Study Details\n")
         cat("-------------------\n")
         cat("Unit:", unit, "\n")
@@ -181,5 +188,5 @@ uos <- function(website_url) {
     }
   )
 
-  return(invisible(out))
+  return(invisible(object))
 }
