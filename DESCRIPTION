@@ -18,5 +18,7 @@ Imports:
     dplyr,
     tidyr,
     lubridate,
+    purrr,
+    stringr,
     huxtable,
     rvest
