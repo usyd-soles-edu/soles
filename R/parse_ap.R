@@ -1,8 +1,9 @@
 #' Parse Disability Academic Plans file
 #'
-#' The Disability Academic Plans file is an Excel file that isn't easy to read.
-#' This function formats the file into a readable data frame format for easier
-#' data manipulation.
+#' Convert a complex Excel-formatted Disability Academic Plans file into a clean
+#' data frame. The input file contains two header rows that need special
+#' processing to create proper column names. This function handles that
+#' complexity and returns a structured tibble.
 #'
 #' @param path path to file
 #'
