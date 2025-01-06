@@ -41,5 +41,4 @@ specified.
 \code{\link{parse_canvas}} for parsing Canvas exports
 \code{\link{parse_gradescope}} for parsing Gradescope exports
 \code{\link{parse_spec_cons}} for parsing special considerations
-\code{\link{select_markbook_assessments}} for selecting and weighting assessments
 }
