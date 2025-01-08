@@ -5,13 +5,8 @@
 #'
 #' @returns a list object
 #'
-#' @importFrom rvest read_html html_elements html_nodes html_text html_table
-#' @importFrom dplyr filter mutate select first
-#' @importFrom stringr str_trim str_extract str_detect
-#' @importFrom purrr pluck
-#' @importFrom huxtable hux set_bold set_all_borders set_position everywhere
-#' @importFrom lubridate dmy_hm
 #' @importFrom readr read_rds write_rds
+#' @importFrom stringr str_detect str_extract
 #'
 #' @export
 uos <- function(unit, path = NULL) {
@@ -58,13 +53,10 @@ uos <- function(unit, path = NULL) {
     return(invisible(out))
   }
 
-  # Original URL handling logic continues here
   # Create filename from URL components
   unit_code <- str_extract(unit, "(?<=/units/)[^/]+")
   semester_info <- str_extract(unit, "[^/]+$")
   filename <- paste0(unit_code, "-", semester_info, ".rds")
-
-  # Use provided path or current working directory
   filepath <- file.path(save_path, filename)
 
   # Check if file exists and set save_rds flag
@@ -74,14 +66,64 @@ uos <- function(unit, path = NULL) {
       message("Unit outline data is current. Using cached version.")
       out <- existing_data
       save_rds <- FALSE
-      return(invisible(out)) # Early return for cached data
+      return(invisible(out))
     }
     message("Unit outline data is outdated. Fetching new data.")
   }
 
+  # Parse the webpage
+  out <- parse_uos(unit)
+
+  # Save the file with proper naming
+  if (save_rds) {
+    write_rds(out, filepath)
+    message("Saved as ", filename, " in ", save_path)
+  }
+
+  # Print formatted output
+  tryCatch(
+    {
+      with(out, {
+        cat("\nUnit of Study Details\n")
+        cat("---------------------\n")
+        cat("Unit:", unit, description, "\n")
+        cat("Year:", year, semester, "\n")
+        cat("Location:", location, "\n\n")
+        cat("Assessment Schedule\n")
+        cat("---------------------\n")
+        print(assessments)
+        cat("---------------------\n")
+        cat(
+          "Note: The saved .rds file may be used by other functions to extract",
+          "specific information and should not be deleted. See `?uos` for more",
+          "details."
+        )
+      })
+    },
+    error = function(e) {
+      warning("Failed to print formatted output: ", e$message)
+    }
+  )
+  return(invisible(out))
+}
+
+#' Parse unit of study webpage
+#'
+#' @param url string. The URL of the unit outline page
+#'
+#' @returns a list object with parsed unit information
+#'
+#' @importFrom rvest read_html html_elements html_nodes html_text html_table
+#' @importFrom dplyr filter mutate select first
+#' @importFrom stringr str_trim str_extract str_detect
+#' @importFrom purrr pluck
+#' @importFrom lubridate dmy_hm
+#'
+#' @keywords internal
+parse_uos <- function(url) {
   # Read webpage with error handling
   webpage <- tryCatch(
-    read_html(unit),
+    read_html(url),
     error = \(e) stop("Failed to access webpage: ", e$message)
   )
 
@@ -130,48 +172,16 @@ uos <- function(unit, path = NULL) {
   if (nrow(assessments) == 0) stop("No assessment data found")
 
   # Create and return results
-  out <-
-    structure(
-      list(
-        accessed = Sys.time(),
-        unit = str_trim(parts[1]),
-        description = str_trim(parts[2]),
-        year = year,
-        semester = semester,
-        location = location,
-        assessments = assessments
-      ),
-      class = c("uos", "list")
-    )
-
-  # Save the file with proper naming
-  if (save_rds) {
-    write_rds(out, filepath)
-    message("Saved as ", filename, " in ", save_path)
-  }
-  # Print formatted output
-  tryCatch(
-    {
-      with(out, {
-        cat("\nUnit of Study Details\n")
-        cat("---------------------\n")
-        cat("Unit:", unit, description, "\n")
-        cat("Year:", year, semester, "\n")
-        cat("Location:", location, "\n\n")
-        cat("Assessment Schedule\n")
-        cat("---------------------\n")
-        print(assessments)
-        cat("---------------------\n")
-        cat(
-          "Note: The saved .rds file may be used by other functions to extract",
-          "specific information and should not be deleted. See `?uos` for more",
-          "details."
-        )
-      })
-    },
-    error = function(e) {
-      warning("Failed to print formatted output: ", e$message)
-    }
+  structure(
+    list(
+      accessed = Sys.time(),
+      unit = str_trim(parts[1]),
+      description = str_trim(parts[2]),
+      year = year,
+      semester = semester,
+      location = location,
+      assessments = assessments
+    ),
+    class = c("uos", "list")
   )
-  return(invisible(out))
 }
