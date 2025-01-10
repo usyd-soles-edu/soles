@@ -27,14 +27,14 @@ uos <- function(unit, path = NULL) {
         ". Please provide a URL to fetch the data."
       )
     }
-
     out <- read_rds(filepath)
-    source_status <- "Cached"
+    cat(paste0("Found saved data for ", unit, "."))
   } else {
     # Create filename from URL components
     unit_code <- str_extract(unit, "(?<=/units/)[^/]+")
     semester_info <- str_extract(unit, "[^/]+$")
-    filename <- paste0(unit_code, "-", semester_info, ".rds")
+    uos_id <- paste0(unit_code, "-", semester_info)
+    filename <- paste0(uos_id, ".rds")
     filepath <- file.path(save_path, filename)
 
     # Check if file exists and is current
@@ -42,12 +42,19 @@ uos <- function(unit, path = NULL) {
     if (file.exists(filepath)) {
       existing_data <- read_rds(filepath)
       if (year(existing_data$accessed) == year(Sys.time())) {
-        message("Unit outline data is current. Using cached version.")
+        cat(paste0("Found saved data for ", uos_id, "."))
         out <- existing_data
         save_rds <- FALSE
-        source_status <- "Cached"
+      } else if (difftime(Sys.time(), existing_data$accessed, units = "hours") <= 24) {
+        cat(paste0("Found saved data for ", uos_id, "."))
+        out <- existing_data
+        save_rds <- FALSE
       } else {
-        message("Unit outline data is outdated. Fetching new data.")
+        cat(
+          "Found saved data for",
+          uos_id,
+          "but will update as it is older than 24 hours."
+        )
       }
     }
 
@@ -60,34 +67,8 @@ uos <- function(unit, path = NULL) {
         write_rds(out, filepath)
         message("Saved as ", filename, " in ", save_path)
       }
-      source_status <- "Fetched"
     }
   }
-
-  # Print formatted output
-  tryCatch(
-    {
-      with(out, {
-        cat("\nUnit of Study Details", if (source_status == "Cached") "(Cached)" else "", "\n")
-        cat("---------------------\n")
-        cat("Unit:", unit, description, "\n")
-        cat("Year:", year, semester, "\n")
-        cat("Location:", location, "\n\n")
-        cat("Assessment Schedule\n")
-        cat("---------------------\n")
-        print(assessments)
-        cat("---------------------\n")
-        cat(
-          "Note: The saved .rds file may be used by other functions to extract",
-          "specific information and should not be deleted. See `?uos` for more",
-          "details."
-        )
-      })
-    },
-    error = function(e) {
-      warning("Failed to print formatted output: ", e$message)
-    }
-  )
   return(invisible(out))
 }
 
@@ -112,45 +93,54 @@ parse_uos <- function(url) {
   )
 
   # Extract unit info
-  unit_text <- webpage %>%
-    html_elements(".b-student-site__section-title") %>%
-    html_text() %>%
+  unit_text <- webpage |>
+    html_elements(".b-student-site__section-title") |>
+    html_text() |>
     str_trim()
 
-  if (length(unit_text) == 0) stop("Could not find unit information. Is the URL correct?")
+  if (length(unit_text) == 0) {
+    stop(
+      "Could not find unit information. ",
+      "Is the URL correct?"
+    )
+  }
 
   parts <- strsplit(unit_text, ":")[[1]]
   if (length(parts) != 2) stop("Invalid unit information format")
 
   # Extract header info
-  header <- webpage %>%
-    html_elements("h3") %>%
-    html_text() %>%
+  header <- webpage |>
+    html_elements("h3") |>
+    html_text() |>
     first()
 
   if (is.na(header)) stop("Could not find header information")
 
   # Parse header components
   year <- str_extract(header, "\\d{4}")
-  semester <- str_extract(header, "Semester\\s*\\d") %>% str_trim()
-  location <- str_extract(header, "(?<=-).*(?=\\n)") %>% str_trim()
+  semester <- str_extract(header, "Semester\\s*\\d") |>
+    str_trim()
+  location <- str_extract(header, "(?<=-).*(?=\\n)") |>
+    str_trim()
 
   if (any(is.na(c(year, semester, location)))) {
     stop("Missing required header information")
   }
 
   # Extract assessment information
-  assessments <- webpage %>%
-    html_elements("table") %>%
-    html_table() %>%
-    pluck(3, .default = data.frame()) %>%
-    filter(!str_detect(Type, "Outcomes assessed|= group assignment")) %>%
+  assessments <- webpage |>
+    html_elements("table") |>
+    html_table() |>
+    pluck(3, .default = data.frame()) |>
+    filter(!str_detect(Type, "Outcomes assessed|= group assignment")) |>
     mutate(
       Type = str_extract(Type, "^[^\\n]+"),
       Description = str_extract(Description, "^[^\n]+"),
-      Deadline = str_extract(Due, "(?<=Due date:).*") %>% str_trim() %>% dmy_hm(),
+      Deadline = str_extract(Due, "(?<=Due date:).*") |>
+        str_trim() |>
+        dmy_hm(),
       Due = if_else(str_detect(Due, "\n"), str_extract(Due, "^[^\n]+"), Due)
-    ) %>%
+    ) |>
     select(-Length)
 
   if (nrow(assessments) == 0) stop("No assessment data found")
@@ -167,5 +157,33 @@ parse_uos <- function(url) {
       assessments = assessments
     ),
     class = c("uos", "list")
+  )
+}
+
+
+#' @export
+#' @method summary uos
+summary.uos <- function(object, ...) {
+  # Print formatted output
+  tryCatch(
+    {
+      cat("\nUnit of Study Details\n")
+      cat("---------------------\n")
+      cat("Unit:", object$unit, object$description, "\n")
+      cat("Year:", object$year, object$semester, "\n")
+      cat("Location:", object$location, "\n\n")
+      cat("Assessment Schedule\n")
+      cat("---------------------\n")
+      print(object$assessments)
+      cat("---------------------\n")
+      cat(
+        "Note: The saved .rds file may be used by other functions to extract",
+        "specific information and should not be deleted. See `?uos` for more",
+        "details."
+      )
+    },
+    error = function(e) {
+      warning("Failed to print formatted output: ", e$message)
+    }
   )
 }
