@@ -12,7 +12,6 @@
 uos <- function(unit, path = NULL) {
   # Use provided path or current working directory
   save_path <- if (is.null(path)) getwd() else path
-  save_rds <- TRUE # Initialize save_rds flag
 
   # Check if input is a URL or UoS string
   is_url <- str_detect(unit, "^https?://")
@@ -30,61 +29,46 @@ uos <- function(unit, path = NULL) {
     }
 
     out <- read_rds(filepath)
+    source_status <- "Cached"
+  } else {
+    # Create filename from URL components
+    unit_code <- str_extract(unit, "(?<=/units/)[^/]+")
+    semester_info <- str_extract(unit, "[^/]+$")
+    filename <- paste0(unit_code, "-", semester_info, ".rds")
+    filepath <- file.path(save_path, filename)
 
-    # Print formatted output for cached data
-    tryCatch(
-      {
-        with(out, {
-          cat("\nUnit of Study Details (Cached)\n")
-          cat("---------------------\n")
-          cat("Unit:", unit, description, "\n")
-          cat("Year:", year, semester, "\n")
-          cat("Location:", location, "\n\n")
-          cat("Assessment Schedule\n")
-          cat("---------------------\n")
-          print(assessments)
-          cat("---------------------\n")
-        })
-      },
-      error = function(e) {
-        warning("Failed to print formatted output: ", e$message)
+    # Check if file exists and is current
+    save_rds <- TRUE
+    if (file.exists(filepath)) {
+      existing_data <- read_rds(filepath)
+      if (year(existing_data$accessed) == year(Sys.time())) {
+        message("Unit outline data is current. Using cached version.")
+        out <- existing_data
+        save_rds <- FALSE
+        source_status <- "Cached"
+      } else {
+        message("Unit outline data is outdated. Fetching new data.")
       }
-    )
-    return(invisible(out))
-  }
-
-  # Create filename from URL components
-  unit_code <- str_extract(unit, "(?<=/units/)[^/]+")
-  semester_info <- str_extract(unit, "[^/]+$")
-  filename <- paste0(unit_code, "-", semester_info, ".rds")
-  filepath <- file.path(save_path, filename)
-
-  # Check if file exists and set save_rds flag
-  if (file.exists(filepath)) {
-    existing_data <- read_rds(filepath)
-    if (year(existing_data$accessed) == year(Sys.time())) {
-      message("Unit outline data is current. Using cached version.")
-      out <- existing_data
-      save_rds <- FALSE
-      return(invisible(out))
     }
-    message("Unit outline data is outdated. Fetching new data.")
-  }
 
-  # Parse the webpage
-  out <- parse_uos(unit)
+    if (!exists("out")) {
+      # Parse the webpage
+      out <- parse_uos(unit)
 
-  # Save the file with proper naming
-  if (save_rds) {
-    write_rds(out, filepath)
-    message("Saved as ", filename, " in ", save_path)
+      # Save the file with proper naming
+      if (save_rds) {
+        write_rds(out, filepath)
+        message("Saved as ", filename, " in ", save_path)
+      }
+      source_status <- "Fetched"
+    }
   }
 
   # Print formatted output
   tryCatch(
     {
       with(out, {
-        cat("\nUnit of Study Details\n")
+        cat("\nUnit of Study Details", if (source_status == "Cached") "(Cached)" else "", "\n")
         cat("---------------------\n")
         cat("Unit:", unit, description, "\n")
         cat("Year:", year, semester, "\n")
