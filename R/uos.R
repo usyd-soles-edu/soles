@@ -28,7 +28,6 @@ uos <- function(unit, path = NULL) {
       )
     }
     out <- read_rds(filepath)
-    cat(paste0("Found saved data for ", uos_id, ". Use `summary()` to view."))
   } else {
     # Create filename from URL components
     unit_code <- str_extract(unit, "(?<=/units/)[^/]+")
@@ -44,11 +43,8 @@ uos <- function(unit, path = NULL) {
       data_age <- difftime(Sys.time(), existing_data$accessed, units = "hours")
 
       if (data_age <= 24) {
-        cat("Unit outline data is recent. Using cached version.")
         out <- existing_data
         save_rds <- FALSE
-      } else {
-        cat("Unit outline data is outdated. Fetching new data.")
       }
     }
 
@@ -63,7 +59,7 @@ uos <- function(unit, path = NULL) {
       }
     }
   }
-  return(invisible(out))
+  return(out)
 }
 
 #' Parse unit of study webpage
@@ -81,6 +77,7 @@ uos <- function(unit, path = NULL) {
 #' @keywords internal
 parse_uos <- function(url) {
   # Read webpage with error handling
+  message("Downloading from URL...")
   webpage <- tryCatch(
     read_html(url),
     error = \(e) stop("Failed to access webpage: ", e$message)
