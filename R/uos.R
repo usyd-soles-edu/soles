@@ -28,7 +28,7 @@ uos <- function(unit, path = NULL) {
       )
     }
     out <- read_rds(filepath)
-    cat(paste0("Found saved data for ", unit, "."))
+    cat(paste0("Found saved data for ", uos_id, ". Use `summary()` to view."))
   } else {
     # Create filename from URL components
     unit_code <- str_extract(unit, "(?<=/units/)[^/]+")
@@ -41,20 +41,14 @@ uos <- function(unit, path = NULL) {
     save_rds <- TRUE
     if (file.exists(filepath)) {
       existing_data <- read_rds(filepath)
-      if (year(existing_data$accessed) == year(Sys.time())) {
-        cat(paste0("Found saved data for ", uos_id, "."))
-        out <- existing_data
-        save_rds <- FALSE
-      } else if (difftime(Sys.time(), existing_data$accessed, units = "hours") <= 24) {
-        cat(paste0("Found saved data for ", uos_id, "."))
+      data_age <- difftime(Sys.time(), existing_data$accessed, units = "hours")
+
+      if (data_age <= 24) {
+        cat("Unit outline data is recent. Using cached version.")
         out <- existing_data
         save_rds <- FALSE
       } else {
-        cat(
-          "Found saved data for",
-          uos_id,
-          "but will update as it is older than 24 hours."
-        )
+        cat("Unit outline data is outdated. Fetching new data.")
       }
     }
 
