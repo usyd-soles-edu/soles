@@ -32,7 +32,9 @@ find_docs <- function(path = NULL) {
     canvas = c("SIS User ID", "SIS Login ID", "Section"),
     gradescope = c("First Name", "Last Name", "SID", "Email", "Sections"),
     spec_cons = c("state", "classification", "assessment_category"),
-    plans = c("Category", "Assessment Adjustment")
+    academic_plans = c(
+      ".*Category.*", ".*Assessment Adjustment.*", ".*Exam Adjustment.*"
+    )
   )
 
   # List both CSV and Excel files
@@ -85,12 +87,26 @@ find_docs <- function(path = NULL) {
     }
 
     for (type_name in names(type_patterns)) {
-      if (all(type_patterns[[type_name]] %in% cols)) {
-        return(type_name)
+      if (type_name == "academic_plans") {
+        # Use regex matching for academic_plans
+        if (all(sapply(type_patterns[[type_name]], function(pattern) {
+          any(grepl(pattern, cols, ignore.case = TRUE))
+        }))) {
+          return(type_name)
+        }
+      } else {
+        # Use exact matching for other types
+        if (all(type_patterns[[type_name]] %in% cols)) {
+          return(type_name)
+        }
       }
     }
     return("unknown")
   })
+
+  # rearrange columns
+  out <- out %>%
+    select(type, path, modified)
 
   return(out)
 }
