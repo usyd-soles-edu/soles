@@ -29,11 +29,14 @@ build_database <- function(df) {
     filter(type == "canvas") |>
     pull(path) |>
     parse_canvas()
+  unit <- canvas$uos_details[["unit"]]
+  semester <- canvas$uos_details[["semester"]]
+  year <- canvas$uos_details[["year"]]
   message(
     "Unit detected: ",
-    canvas$uos_details[["unit"]], "-",
-    canvas$uos_details[["semester"]], "-",
-    canvas$uos_details[["year"]]
+    unit, "-",
+    semester, "-",
+    year
   )
   message("Filtering data based on unit, semester, and year...")
   Sys.sleep(1)
@@ -81,7 +84,12 @@ build_database <- function(df) {
       ap = ap,
       spec_cons = spec_cons
     )
-  message("Done! All files are parsed")
+  message(
+    "Done! All files are parsed for ",
+    unit, "-",
+    semester, "-",
+    year
+  )
 
   return(invisible(out))
 }
