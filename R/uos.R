@@ -170,7 +170,7 @@ summary.uos <- function(object, ...) {
       cat(
         "Note: The saved .rds file may be used by other functions to extract",
         "specific information and should not be deleted. See `?uos` for more",
-        "details."
+        "details.\n"
       )
     },
     error = function(e) {
