@@ -33,7 +33,7 @@ build_database <- function(df) {
   semester <- canvas$uos_details[["semester"]]
   year <- canvas$uos_details[["year"]]
   message(
-    "Unit detected: ",
+    "Unit of Study: ",
     unit, "-",
     semester, "-",
     year
