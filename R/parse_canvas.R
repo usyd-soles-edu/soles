@@ -29,12 +29,23 @@ parse_canvas <- function(x) {
       Unikey = `SIS Login ID`
     )
 
-  # Extract unit details from first section
+  # Extract unit details from first section - now with error handling
   section <- canvas$Section[1]
   uos_code <- str_extract(section, "(?<=\\(activity\\)\\s).*?(?=/)")
-  uos_details <- setNames(
-    strsplit(uos_code, "-")[[1]],
-    c("year", "unit", "semester", "type", "delivery")
+
+  # Return NULL for uos_details if extraction fails
+  uos_details <- tryCatch(
+    {
+      if (is.na(uos_code)) {
+        return(NULL)
+      }
+      parts <- strsplit(uos_code, "-")[[1]]
+      if (length(parts) != 5) {
+        return(NULL)
+      }
+      setNames(parts, c("year", "unit", "semester", "type", "delivery"))
+    },
+    error = function(e) NULL
   )
 
   list(canvas = canvas, uos_details = uos_details)

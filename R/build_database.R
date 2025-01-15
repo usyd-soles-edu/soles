@@ -4,10 +4,11 @@
 #' function is limited to one file of each type. Gradescope file is optional.
 #'
 #' @param df A data frame containing file paths and metadata
+#' @param uos Optional. Unit of study URL or code (e.g., "BIOL1009-2024-S1C-ND-CC")
 #'
 #' @returns A list of parsed data frames (as tibbles)
 #' @export
-build_database <- function(df) {
+build_database <- function(df, uos = NULL) {
   # Get latest file of each type
   message("Picking files...")
   picked <- df |>
@@ -24,14 +25,30 @@ build_database <- function(df) {
 
   # read canvas
   message("Parsing Canvas...")
-  canvas <-
-    picked |>
+  canvas <- picked |>
     filter(type == "canvas") |>
     pull(path) |>
     parse_canvas()
-  unit <- canvas$uos_details[["unit"]]
-  semester <- canvas$uos_details[["semester"]]
-  year <- canvas$uos_details[["year"]]
+
+  # Handle unit details
+  if (is.null(canvas$uos_details)) {
+    if (is.null(uos)) {
+      stop(
+        "Could not extract unit details from Canvas. Please provide the unit ",
+        "details using the 'uos' parameter (URL or unit code)."
+      )
+    }
+    message("Using provided unit details...")
+    uos_data <- uos(uos)
+    unit <- uos_data$unit
+    semester <- uos_data$semester
+    year <- uos_data$year
+  } else {
+    unit <- canvas$uos_details[["unit"]]
+    semester <- canvas$uos_details[["semester"]]
+    year <- canvas$uos_details[["year"]]
+  }
+
   message(
     "Unit of Study: ",
     unit, "-",
