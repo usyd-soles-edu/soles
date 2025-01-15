@@ -22,12 +22,14 @@ uos <- function(unit, path = NULL) {
     filepath <- file.path(save_path, filename)
 
     if (!file.exists(filepath)) {
-      stop(
-        "No cached data found for ", unit,
-        ". Please provide a URL to fetch the data."
-      )
+      # Convert UoS string to URL and proceed
+      url <- construct_url(unit)
+      out <- parse_uos(url)
+      write_rds(out, filepath)
+      message("Saved as ", filename, " in ", save_path)
+    } else {
+      out <- read_rds(filepath)
     }
-    out <- read_rds(filepath)
   } else {
     # Create filename from URL components
     unit_code <- str_extract(unit, "(?<=/units/)[^/]+")
@@ -60,6 +62,23 @@ uos <- function(unit, path = NULL) {
     }
   }
   return(out)
+}
+
+#' Construct URL from UoS string
+#'
+#' @param uos_string string in format "UNIT-YEAR-SEM-TYPE-DEL"
+#' @return URL string
+#'
+#' @keywords internal
+construct_url <- function(uos_string) {
+  parts <- strsplit(uos_string, "-")[[1]]
+  if (length(parts) != 5) {
+    stop("UoS string must be in format: UNIT-YEAR-SEMESTER-TYPE-DELIVERY")
+  }
+  paste0(
+    "https://www.sydney.edu.au/units/", parts[1], "/",
+    paste(parts[2:5], collapse = "-")
+  )
 }
 
 #' Parse unit of study webpage
