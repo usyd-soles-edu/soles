@@ -4,10 +4,12 @@
 \alias{build_database}
 \title{Build student database}
 \usage{
-build_database(df)
+build_database(df, uos = NULL)
 }
 \arguments{
 \item{df}{A data frame containing file paths and metadata}
+
+\item{uos}{Optional. Unit of study URL or code (e.g., "BIOL1009-2024-S1C-ND-CC")}
 }
 \value{
 A list of parsed data frames (as tibbles)
