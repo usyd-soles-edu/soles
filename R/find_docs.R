@@ -27,16 +27,6 @@
 #' }
 #' @export
 find_docs <- function(path = NULL) {
-  # Define characteristic columns for each file type
-  type_patterns <- list(
-    canvas = c("SIS User ID", "SIS Login ID", "Section"),
-    gradescope = c("First Name", "Last Name", "SID", "Email", "Sections"),
-    spec_cons = c("state", "classification", "assessment_category"),
-    academic_plans = c(
-      ".*Category.*", ".*Assessment Adjustment.*", ".*Exam Adjustment.*"
-    )
-  )
-
   # List both CSV and Excel files
   files_info <- file.info(list.files(
     path = path,
@@ -86,21 +76,19 @@ find_docs <- function(path = NULL) {
       return("unknown")
     }
 
-    for (type_name in names(type_patterns)) {
-      if (type_name == "academic_plans") {
-        # Use regex matching for academic_plans
-        if (all(sapply(type_patterns[[type_name]], function(pattern) {
-          any(grepl(pattern, cols, ignore.case = TRUE))
-        }))) {
-          return(type_name)
-        }
-      } else {
-        # Use exact matching for other types
-        if (all(type_patterns[[type_name]] %in% cols)) {
-          return(type_name)
-        }
-      }
+    if (detect_canvas(cols)) {
+      return("canvas")
     }
+    if (detect_gradescope(cols)) {
+      return("gradescope")
+    }
+    if (detect_spec_cons(cols)) {
+      return("spec_cons")
+    }
+    if (detect_academic_plans(cols)) {
+      return("academic_plans")
+    }
+
     return("unknown")
   })
 
@@ -109,4 +97,48 @@ find_docs <- function(path = NULL) {
     select(type, path, modified)
 
   return(out)
+}
+
+#' Detect Canvas file format
+#'
+#' @param cols Character vector of column names
+#' @return Logical indicating if columns match Canvas pattern
+detect_canvas <- function(cols) {
+  required_cols <- c("SIS User ID", "SIS Login ID", "Section")
+  all(required_cols %in% cols)
+}
+
+#' Detect Gradescope file format
+#'
+#' @param cols Character vector of column names
+#' @return Logical indicating if columns match Gradescope pattern
+detect_gradescope <- function(cols) {
+  required_cols <- c("First Name", "Last Name", "SID", "Email", "Sections")
+  all(required_cols %in% cols)
+}
+
+#' Detect Special Considerations file format
+#'
+#' @param cols Character vector of column names
+#' @return Logical indicating if columns match Special Considerations pattern
+detect_spec_cons <- function(cols) {
+  # clean up column names
+  cols <- tolower(cols)
+  required_cols <- c("number", "state", "classification")
+  all(required_cols %in% cols)
+}
+
+#' Detect Academic Plans file format
+#'
+#' @param cols Character vector of column names
+#' @return Logical indicating if columns match Academic Plans pattern
+detect_academic_plans <- function(cols) {
+  patterns <- c(
+    ".*Category.*",
+    ".*Assessment Adjustment.*",
+    ".*Exam Adjustment.*"
+  )
+  all(sapply(patterns, function(pattern) {
+    any(grepl(pattern, cols, ignore.case = TRUE))
+  }))
 }
