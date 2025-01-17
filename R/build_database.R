@@ -8,92 +8,94 @@
 #'
 #' @returns A list of parsed data frames (as tibbles)
 #' @export
+#' @importFrom logger log_info log_debug log_error
+#' @importFrom purrr walk
+#' @importFrom dplyr filter group_by slice_max ungroup mutate pull
 build_database <- function(df, uos = NULL) {
+  # Initialize logger for this function
+  logger::log_threshold(logger::DEBUG)
+  log_debug("Starting build_database function")
+
   # Get latest file of each type
-  message("Picking files...")
+  log_info("Selecting most recent files of each type...")
   picked <- df |>
     filter(!type == "unknown") |>
     group_by(type) |>
     slice_max(order_by = modified, n = 1) |>
     ungroup()
 
-  cat("\nFiles used:\n")
+  log_debug("Selected files:")
   picked |>
     mutate(display = paste("-", str_to_title(type), ":", basename(path))) |>
     pull(display) |>
-    walk(~ cat(.x, "\n"))
+    walk(~ log_debug(.x))
 
   # read canvas
-  message("Parsing Canvas...")
+  log_info("Parsing Canvas file...")
   canvas <- picked |>
     filter(type == "canvas") |>
     pull(path) |>
     parse_canvas()
+  log_debug("Canvas parsing complete")
 
   # Handle unit details
   if (is.null(canvas$uos_details)) {
     if (is.null(uos)) {
+      log_error("No unit details found in Canvas and no UoS parameter provided")
       stop(
         "Could not extract unit details from Canvas. Please provide the unit ",
         "details using the 'uos' parameter (URL or unit code)."
       )
     }
-    message("Using provided unit details...")
+    log_info("Using provided unit details...")
     uos_data <- uos(uos)
     unit <- uos_data$unit
     semester <- uos_data$semester
     year <- uos_data$year
   } else {
+    log_debug("Using Canvas unit details")
     unit <- canvas$uos_details[["unit"]]
     semester <- canvas$uos_details[["semester"]]
     year <- canvas$uos_details[["year"]]
   }
 
-  message(
-    "Unit of Study: ",
-    unit, "-",
-    semester, "-",
-    year
-  )
-  message("Filtering data based on unit, semester, and year...")
-  Sys.sleep(1)
+  log_info(sprintf("Processing data for %s-%s-%s", unit, semester, year))
+  log_debug("Applying unit/semester/year filters...")
 
   # read gradescope
-  message("Parsing Gradescope...")
+  log_info("Parsing Gradescope file...")
   gradescope <-
     picked |>
     filter(type == "gradescope") |>
     pull(path) |>
     parse_gradescope()
+  log_debug("Gradescope parsing complete")
 
   # read ap
-  message("Parsing academic plans...")
+  log_info("Parsing academic plans...")
   ap <-
     picked |>
     filter(type == "academic_plans") |>
     pull(path) |>
     parse_ap() |>
-    filter(Year %in% canvas$uos_details[["year"]]) |>
-    filter(`UoS Code` %in% canvas$uos_details[["unit"]]) |>
-    filter(Session %in% canvas$uos_details[["semester"]])
+    filter(Year %in% year) |>
+    filter(`UoS Code` %in% unit) |>
+    filter(Session %in% semester)
+  log_debug("Academic plans parsing complete")
 
   # read spec_cons
-  message("Parsing special considerations...")
-  spec_cons <-
-    picked |>
+  log_info("Parsing special considerations...")
+  spec_cons_path <- picked |>
     filter(type == "spec_cons") |>
-    pull(path) |>
-    parse_sc() |>
-    filter(
-      str_detect(
-        availability,
-        paste0(
-          unit, "-",
-          semester, "-",
-          year
-        )
-      )
-    )
+    pull(path)
+
+  spec_cons <- parse_sc(
+    spec_cons_path,
+    uos = unit,
+    year = year
+  )
+  log_debug("Special considerations parsing complete")
+
   out <-
     list(
       canvas = canvas$canvas,
@@ -101,12 +103,7 @@ build_database <- function(df, uos = NULL) {
       ap = ap,
       spec_cons = spec_cons
     )
-  message(
-    "Done! All files are parsed for ",
-    unit, "-",
-    semester, "-",
-    year
-  )
+  log_info(sprintf("Build complete for %s-%s-%s", unit, semester, year))
 
   return(invisible(out))
 }
