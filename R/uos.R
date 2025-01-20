@@ -130,6 +130,7 @@ parse_uos <- function(url) {
   year <- str_extract(header, "\\d{4}")
   semester <- str_extract(header, "Semester\\s*\\d") |>
     str_trim()
+  semester_code <- paste0("S", str_extract(semester, "\\d"), "C")
   location <- str_extract(header, "(?<=-).*(?=\\n)") |>
     str_trim()
 
@@ -162,7 +163,7 @@ parse_uos <- function(url) {
       unit = str_trim(parts[1]),
       description = str_trim(parts[2]),
       year = year,
-      semester = semester,
+      semester = semester_code,
       location = location,
       assessments = assessments
     ),
@@ -180,7 +181,7 @@ summary.uos <- function(object, ...) {
       cat("\nUnit of Study Details\n")
       cat("---------------------\n")
       cat("Unit:", object$unit, object$description, "\n")
-      cat("Year:", object$year, object$semester, "\n")
+      cat("Year:", object$year, "Semester:", object$semester, "\n")
       cat("Location:", object$location, "\n\n")
       cat("Assessment Schedule\n")
       cat("---------------------\n")
