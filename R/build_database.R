@@ -39,48 +39,46 @@ build_database <- function(df, uos = NULL) {
   log_debug("Canvas parsing complete")
 
   # Handle unit details
-  if (is.null(canvas$uos_details)) {
-    if (is.null(uos)) {
-      log_error("No unit details found in Canvas and no UoS parameter provided")
-      stop(
-        "Could not extract unit details from Canvas. Please provide the unit ",
-        "details using the 'uos' parameter (URL or unit code)."
-      )
-    }
+  log_info("Processing unit details...")
+  uos_data <- if (!is.null(uos)) {
     log_info("Using provided unit details...")
-    uos_data <- uos(uos)
-    unit <- uos_data$unit
-    semester <- uos_data$semester
-    year <- uos_data$year
+    uos(uos)
+  } else if (!is.null(canvas$uos_details)) {
+    log_info("Using Canvas unit details...")
+    canvas$uos_details
   } else {
-    log_debug("Using Canvas unit details")
-    unit <- canvas$uos_details[["unit"]]
-    semester <- canvas$uos_details[["semester"]]
-    year <- canvas$uos_details[["year"]]
+    log_error("No unit details available")
+    stop(
+      "Could not determine unit details. Please provide the unit ",
+      "details using the 'uos' parameter (URL or unit code)."
+    )
   }
 
+  unit <- uos_data$unit
+  semester <- uos_data$semester
+  year <- uos_data$year
+
   log_info(sprintf("Processing data for %s-%s-%s", unit, semester, year))
-  log_debug("Applying unit/semester/year filters...")
 
   # read gradescope
   log_info("Parsing Gradescope file...")
-  gradescope <-
-    picked |>
+  gradescope <- picked |>
     filter(type == "gradescope") |>
     pull(path) |>
     parse_gradescope()
+
   log_debug("Gradescope parsing complete")
 
   # read ap
   log_info("Parsing academic plans...")
-  ap <-
-    picked |>
+  ap <- picked |>
     filter(type == "academic_plans") |>
     pull(path) |>
     parse_ap() |>
-    filter(Year %in% year) |>
-    filter(`UoS Code` %in% unit) |>
-    filter(Session %in% semester)
+    filter(Year == year) |>
+    filter(`UoS Code` == unit) |>
+    filter(Session == semester)
+
   log_debug("Academic plans parsing complete")
 
   # read spec_cons
@@ -96,13 +94,13 @@ build_database <- function(df, uos = NULL) {
   )
   log_debug("Special considerations parsing complete")
 
-  out <-
-    list(
-      canvas = canvas$canvas,
-      gradescope = gradescope,
-      ap = ap,
-      spec_cons = spec_cons
-    )
+  out <- list(
+    unit_details = uos_data,
+    canvas = canvas$canvas,
+    gradescope = gradescope,
+    ap = ap,
+    spec_cons = spec_cons
+  )
   log_info(sprintf("Build complete for %s-%s-%s", unit, semester, year))
 
   return(invisible(out))
