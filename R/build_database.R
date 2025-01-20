@@ -94,12 +94,21 @@ build_database <- function(df, uos = NULL) {
   )
   log_debug("Special considerations parsing complete")
 
+  # read sres
+  log_info("Parsing SRES data...")
+  sres <- picked |>
+    filter(type == "sres") |>
+    pull(path) |>
+    parse_sres()
+  log_debug("SRES parsing complete")
+
   out <- list(
     unit_details = uos_data,
     canvas = canvas$canvas,
     gradescope = gradescope,
     ap = ap,
-    spec_cons = spec_cons
+    spec_cons = spec_cons,
+    sres = sres
   )
   log_info(sprintf("Build complete for %s-%s-%s", unit, semester, year))
 
