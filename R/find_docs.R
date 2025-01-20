@@ -82,13 +82,18 @@ find_docs <- function(path = NULL) {
     if (detect_gradescope(cols)) {
       return("gradescope")
     }
+    if (detect_sres(cols)) {
+      return("sres")
+    }
     if (detect_spec_cons(cols)) {
       return("spec_cons")
     }
     if (detect_academic_plans(cols)) {
       return("academic_plans")
     }
-
+    if (detect_sres(cols)) {
+      return("sres")
+    }
     return("unknown")
   })
 
@@ -141,4 +146,16 @@ detect_academic_plans <- function(cols) {
   all(sapply(patterns, function(pattern) {
     any(grepl(pattern, cols, ignore.case = TRUE))
   }))
+}
+
+#' Detect SRES file format
+#'
+#' @param cols Character vector of column names
+#' @return Logical indicating if columns match SRES pattern
+detect_sres <- function(cols) {
+  required_cols <- c(
+    "Preferred name", "Given names", "Surname", "SID",
+    "Email", "Username"
+  )
+  all(required_cols %in% cols)
 }
