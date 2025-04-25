@@ -4,12 +4,14 @@
 \alias{parse_sc}
 \title{Parse spec cons file}
 \usage{
-parse_sc(x, uos = NULL, year = NULL)
+parse_sc(x, uos = NULL, semester = NULL, year = NULL)
 }
 \arguments{
 \item{x}{Path to sc file (CSV or XLSX format)}
 
 \item{uos}{Unit of study code to filter by (optional)}
+
+\item{semester}{Semester code to filter by (e.g., "S1C", "S2C") (optional)}
 
 \item{year}{Year to filter by (optional)}
 }
