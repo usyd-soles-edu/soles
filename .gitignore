@@ -5,3 +5,14 @@
 .DS_Store
 .quarto
 _playground/
+.roo/system-prompt-flow-architect
+
+.roo/system-prompt-flow-ask
+
+.roo/system-prompt-flow-code
+
+.roo/system-prompt-flow-debug
+
+.roomodes
+
+memory-bank/
