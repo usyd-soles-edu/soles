@@ -7,7 +7,7 @@
 parse_gradescope(x)
 }
 \arguments{
-\item{x}{Path to Gradescope export file}
+\item{x}{Path to Gradescope export file (CSV or XLSX format)}
 }
 \value{
 A data frame containing parsed Gradescope data
