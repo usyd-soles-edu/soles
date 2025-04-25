@@ -2,10 +2,10 @@
 #'
 #' This function launches a Shiny app that allows users to browse and view
 #' special considerations files. The app provides filtering options for
-#' unit of study code and year.
+#' unit of study code, semester, and year.
 #'
 #' @export
-#' @importFrom shiny shinyApp fluidPage fileInput renderDataTable textInput
+#' @importFrom shiny shinyApp fluidPage fileInput renderDataTable textInput selectInput
 #' @importFrom DT dataTableOutput renderDT DTOutput
 #'
 extensionsGUI <- function() {
@@ -20,6 +20,13 @@ extensionsGUI <- function() {
       )
     ),
     shiny::textInput("uos", "Filter by UoS Code (optional)"),
+    shiny::selectInput("semester", "Filter by Semester (optional)",
+      choices = c(
+        "All" = "",
+        "Semester 1" = "S1C",
+        "Semester 2" = "S2C"
+      )
+    ),
     shiny::textInput("year", "Filter by Year (optional)"),
     DT::DTOutput("table")
   )
@@ -30,10 +37,15 @@ extensionsGUI <- function() {
 
       # Get filter values, convert empty strings to NULL
       uos <- if (input$uos == "") NULL else input$uos
+      semester <- if (input$semester == "") NULL else input$semester
       year <- if (input$year == "") NULL else input$year
 
       # Use parse_sc with filters
-      parse_sc(input$file$datapath, uos = uos, year = year)
+      parse_sc(input$file$datapath,
+        uos = uos,
+        semester = semester,
+        year = year
+      )
     })
   }
 
