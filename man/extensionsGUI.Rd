@@ -9,5 +9,5 @@ extensionsGUI()
 \description{
 This function launches a Shiny app that allows users to browse and view
 special considerations files. The app provides filtering options for
-unit of study code and year.
+unit of study code, semester, and year.
 }
