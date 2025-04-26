@@ -5,6 +5,9 @@ library(shinyjs)
 
 page_sidebar(
   useShinyjs(),
+  tags$head(
+    tags$link(rel = "stylesheet", type = "text/css", href = "styles.css")
+  ),
   title = "Extensions Viewer",
   theme = bs_theme(version = 5),
 
@@ -19,20 +22,7 @@ page_sidebar(
       div(
         class = "mb-3",
         h6("Data Source", class = "text-muted mb-2"),
-        tags$style(HTML("
-          .btn-file {
-            padding: 0.25rem 0.5rem !important;
-            font-size: 0.875rem !important;
-            line-height: 1.5 !important;
-            height: calc(1.5em + 0.5rem + 2px) !important;
-          }
-          .form-control {
-            padding: 0.25rem 0.5rem !important;
-            font-size: 0.875rem !important;
-            line-height: 1.5 !important;
-            height: calc(1.5em + 0.5rem + 2px) !important;
-          }
-        ")),
+        # Custom styles moved to www/styles.css
         div(
           class = "small",
           fileInput("file", "Choose Special Considerations File",
@@ -44,6 +34,19 @@ page_sidebar(
             ),
             width = "100%",
             buttonLabel = "Browse..."
+          )
+        ),
+        # Academic Plan File input section
+        div(
+          class = "mb-3",
+          h6("Academic Plan Data (Optional)", class = "text-muted mb-2"),
+          div(
+            class = "small",
+            fileInput("file_ap", "Choose Academic Plan File (.xlsx)",
+              accept = ".xlsx",
+              width = "100%",
+              buttonLabel = "Browse..."
+            )
           )
         )
       ),
@@ -132,7 +135,7 @@ page_sidebar(
             condition = "input.process > 0",
             div(
               class = "small text-muted p-2",
-              "Note: 'Section Id' and 'Student name' columns are intentionally left blank for upload to SEAMS2."
+              "Note: 'Section Id' and 'Student name' columns are intentionally left blank for compatibility with SEAMS2 upload."
             ),
             div(
               class = "table-responsive",
@@ -144,5 +147,6 @@ page_sidebar(
         )
       )
     )
+    # (Academic Plan Card removed as data is merged into Results table)
   )
 )
