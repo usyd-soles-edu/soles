@@ -1,18 +1,17 @@
 #' Parse spec cons file
 #'
-#' @param x Path to sc file (CSV or XLSX format)
-#' @param uos Unit of study code to filter by (optional)
-#' @param semester Semester code to filter by (e.g., "S1C", "S2C") (optional)
-#' @param year Year to filter by (optional)
-#' @return A data frame containing filtered sc data
+#' Reads and standardizes data from a special consideration file (CSV or XLSX).
+#'
+#' @param x Path to the special consideration file (CSV or XLSX format).
+#' @return A data frame containing the standardized special consideration data.
 #' @importFrom readr read_csv
 #' @importFrom readxl read_xlsx
-#' @importFrom dplyr filter mutate rename select any_of
+#' @importFrom dplyr mutate
 #' @importFrom tools file_ext
-#' @importFrom lubridate dmy_hms dmy parse_date_time
+#' @importFrom lubridate parse_date_time
 #' @importFrom rlang .data :=
 #' @export
-parse_sc <- function(x, uos = NULL, semester = NULL, year = NULL) {
+parse_sc <- function(x) {
   # Get file extension
   file_ext <- tolower(tools::file_ext(x))
 
@@ -23,73 +22,27 @@ parse_sc <- function(x, uos = NULL, semester = NULL, year = NULL) {
     stop("Unsupported file format. Only CSV and XLSX files are supported.")
   )
 
-  # --- Date Parsing and Column Renaming ---
-  due_date_col_csv <- "due_date"
-  revised_date_col_csv <- "extension_in_calendar_days" # Misleading name in CSV
-  due_date_col_xlsx <- "Assessment Due Date"
-  revised_date_col_xlsx <- "Revised Due Date"
-
-  # Parse dates in place
-  if (file_ext == "csv") {
-    if (due_date_col_csv %in% names(df)) {
-      df <- df |>
-        dplyr::mutate(
-          # Parse CSV date string "dd-mm-yyyy HH:MM:SS" and overwrite
-          "{due_date_col_csv}" := suppressWarnings(lubridate::dmy_hms(.data[[due_date_col_csv]], quiet = TRUE))
-        )
-    }
-    if (revised_date_col_csv %in% names(df)) {
-      df <- df |>
-        dplyr::mutate(
-          # Parse CSV date string "dd-mm-yyyy" and overwrite
-          "{revised_date_col_csv}" := suppressWarnings(lubridate::dmy(.data[[revised_date_col_csv]], quiet = TRUE))
-        )
-    }
-  } else if (file_ext == "xlsx") {
-    if (due_date_col_xlsx %in% names(df)) {
-      # Excel dates are often read as POSIXct already, but ensure consistency and overwrite
-      df <- df |>
-        dplyr::mutate(
-          "{due_date_col_xlsx}" := suppressWarnings(lubridate::parse_date_time(.data[[due_date_col_xlsx]], orders = c("Ymd HMS", "Ymd")))
-        )
-    }
-    if (revised_date_col_xlsx %in% names(df)) {
-      # Ensure consistency, parse as Date and overwrite
-      df <- df |>
-        dplyr::mutate(
-          "{revised_date_col_xlsx}" := suppressWarnings(as.Date(lubridate::parse_date_time(.data[[revised_date_col_xlsx]], orders = c("Ymd HMS", "Ymd"))))
-        )
-    }
+  # --- Standardise column names ---
+  expected_cols <- 22
+  if (ncol(df) != expected_cols) {
+    stop(paste("Expected", expected_cols, "columns, but found", ncol(df), "in file:", x))
   }
 
-  # Column names are kept as original after in-place parsing above.
+  names(df) <- c(
+    "number", "state", "classification", "school", "uo_s_availability",
+    "assessment_category", "assessment_type", "assessment_title", "assessment",
+    "alternate_consideration", "closing_date", "assessment_due_date",
+    "teacher_coordinator", "student", "student_id", "outcome_type",
+    "revised_due_date", "affected_end", "affected_start", "created",
+    "updated_by", "updated"
+  )
 
-  # --- Filtering ---
-  # Set availability column name based on file type
-  availability_col <- if (file_ext == "xlsx") {
-    "UoS (availability)"
-  } else {
-    "availability"
+
+  if (is.character(df$revised_due_date)) {
+    df <- dplyr::mutate(df, revised_due_date = lubridate::dmy(revised_due_date))
   }
-
-  # Apply filters based on provided parameters (if availability column exists)
-  if (availability_col %in% names(df)) {
-    if (!is.null(uos)) {
-      df <- dplyr::filter(df, grepl(uos, .data[[availability_col]]))
-    }
-
-    if (!is.null(semester)) {
-      # Filter by semester code which appears between unit code and year
-      # Example: ENVX2001-S1C-2025-ND-CC
-      df <- dplyr::filter(df, grepl(paste0("-", semester, "-"), .data[[availability_col]]))
-    }
-
-    if (!is.null(year)) {
-      df <- dplyr::filter(df, grepl(year, .data[[availability_col]]))
-    }
-  } else {
-    # Optionally add a warning if the availability column is missing
-    warning("Column '", availability_col, "' not found. Skipping availability filters.")
+  if (is.character(df$assessment_due_date)) {
+    df <- dplyr::mutate(df, assessment_due_date = lubridate::dmy_hms(assessment_due_date))
   }
 
   return(df)
@@ -129,19 +82,18 @@ filter_sc <- function(data, uos = NULL, session = NULL, year = NULL, mode = NULL
     stop("Input 'data' must be a data frame.")
   }
 
-  # Identify the availability column
-  availability_col <- NULL
-  if ("availability" %in% names(data)) {
-    availability_col <- "availability"
-  } else if ("UoS (availability)" %in% names(data)) {
-    availability_col <- "UoS (availability)"
-  } else {
-    logger::log_warn("Could not find 'availability' or 'UoS (availability)' column. Returning original data frame.")
-    # Consider using log_error and stop() if this column is essential and its absence is truly an error
-    # stop("Essential availability column not found.")
+  # --- Simplified availability column check ---
+  # Since parse_sc standardizes names, we expect "uo_s_availability"
+  availability_col <- "uo_s_availability"
+  if (!(availability_col %in% names(data))) {
+    logger::log_warn(paste("Could not find the expected column:", availability_col, ". Returning original data frame."))
+    # Consider if this should be an error depending on requirements
+    # stop(paste("Essential column not found:", availability_col))
     return(data)
   }
   logger::log_info(paste("Using availability column:", availability_col))
+  # --- End simplification ---
+
 
   # Check if any filtering arguments are provided
   filter_args <- list(uos = uos, session = session, year = year, mode = mode, location = location)
