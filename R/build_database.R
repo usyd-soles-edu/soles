@@ -87,8 +87,9 @@ build_database <- function(df, uos = NULL) {
     filter(type == "spec_cons") |>
     pull(path)
 
-  spec_cons <- parse_sc(
-    spec_cons_path,
+  spec_cons_raw <- parse_sc(spec_cons_path)
+  spec_cons <- filter_sc(
+    spec_cons_raw,
     uos = unit,
     year = year
   )
