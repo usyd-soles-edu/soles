@@ -6,29 +6,31 @@
 \usage{
 filter_sc(
   data,
-  uos = NULL,
-  session = NULL,
-  year = NULL,
-  mode = NULL,
-  location = NULL
+  uos_filter = NULL,
+  session_filter = NULL,
+  year_filter = NULL,
+  mode_filter = NULL,
+  location_filter = NULL
 )
 }
 \arguments{
 \item{data}{A data frame, typically the output of \code{\link{parse_sc}}.}
 
-\item{uos}{Optional. A character string specifying the Unit of Study code to filter by (e.g., "ENVX2001").}
+\item{uos_filter}{Optional. A character string specifying the Unit of Study code to filter by (e.g., "ENVX2001"). Renamed from \code{uos} to avoid conflict with the new column.}
 
-\item{session}{Optional. A character string specifying the session code to filter by (e.g., "S1C").}
+\item{session_filter}{Optional. A character string specifying the session code to filter by (e.g., "S1C"). Renamed from \code{session}.}
 
-\item{year}{Optional. A numeric or character string specifying the year to filter by (e.g., 2025).}
+\item{year_filter}{Optional. A numeric or character string specifying the year to filter by (e.g., 2025). Renamed from \code{year}.}
 
-\item{mode}{Optional. A character string specifying the mode code to filter by (e.g., "ND").}
+\item{mode_filter}{Optional. A character string specifying the mode code to filter by (e.g., "ND"). Renamed from \code{mode}.}
 
-\item{location}{Optional. A character string specifying the location code to filter by (e.g., "CC").}
+\item{location_filter}{Optional. A character string specifying the location code to filter by (e.g., "CC"). Renamed from \code{location}.}
 }
 \value{
-A data frame filtered according to the provided criteria. Returns the original data frame
-if no filtering arguments are provided or if the availability column is not found or malformed.
+A data frame containing the special consideration data, potentially filtered,
+with the \code{uo_s_availability} column split into \code{uos}, \code{session}, \code{year}, \code{mode}, and \code{location}.
+Returns the original data frame (with split columns) if no filtering arguments are provided.
+Returns the original unmodified data frame if the availability column is not found.
 }
 \description{
 Filters a data frame containing special consideration data based on components
@@ -37,7 +39,11 @@ extracted from the availability column.
 \examples{
 \dontrun{
 # Assuming 'sc_data' is the output from parse_sc()
-filtered_data <- filter_sc(sc_data, uos = "ENVX2001", session = "S1C")
-specific_year_mode <- filter_sc(sc_data, year = 2025, mode = "ND")
+# Split columns and filter by UoS and Session
+filtered_data <- filter_sc(sc_data, uos_filter = "ENVX2001", session_filter = "S1C")
+# Split columns and filter by Year and Mode
+specific_year_mode <- filter_sc(sc_data, year_filter = 2025, mode_filter = "ND")
+# Just split columns without filtering
+split_only_data <- filter_sc(sc_data)
 }
 }

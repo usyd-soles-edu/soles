@@ -2,7 +2,7 @@
 % Please edit documentation in R/utils.R
 \name{set_log_level}
 \alias{set_log_level}
-\title{Set Logging Level for the soles Package}
+\title{Set logging Level}
 \usage{
 set_log_level(level)
 }
