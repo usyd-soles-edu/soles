@@ -54,108 +54,138 @@ parse_sc <- function(x) {
 #' extracted from the availability column.
 #'
 #' @param data A data frame, typically the output of \code{\link{parse_sc}}.
-#' @param uos Optional. A character string specifying the Unit of Study code to filter by (e.g., "ENVX2001").
-#' @param session Optional. A character string specifying the session code to filter by (e.g., "S1C").
-#' @param year Optional. A numeric or character string specifying the year to filter by (e.g., 2025).
-#' @param mode Optional. A character string specifying the mode code to filter by (e.g., "ND").
-#' @param location Optional. A character string specifying the location code to filter by (e.g., "CC").
+#' @param uos_filter Optional. A character string specifying the Unit of Study code to filter by (e.g., "ENVX2001"). Renamed from `uos` to avoid conflict with the new column.
+#' @param session_filter Optional. A character string specifying the session code to filter by (e.g., "S1C"). Renamed from `session`.
+#' @param year_filter Optional. A numeric or character string specifying the year to filter by (e.g., 2025). Renamed from `year`.
+#' @param mode_filter Optional. A character string specifying the mode code to filter by (e.g., "ND"). Renamed from `mode`.
+#' @param location_filter Optional. A character string specifying the location code to filter by (e.g., "CC"). Renamed from `location`.
 #'
-#' @return A data frame filtered according to the provided criteria. Returns the original data frame
-#'   if no filtering arguments are provided or if the availability column is not found or malformed.
+#' @return A data frame containing the special consideration data, potentially filtered,
+#'   with the `uo_s_availability` column split into `uos`, `session`, `year`, `mode`, and `location`.
+#'   Returns the original data frame (with split columns) if no filtering arguments are provided.
+#'   Returns the original unmodified data frame if the availability column is not found.
 #'
-#' @importFrom dplyr filter select all_of
-#' @importFrom stringr str_split_fixed
+#' @importFrom dplyr filter select all_of relocate if_else mutate
+#' @importFrom tidyr separate
 #' @importFrom rlang .data
-#' @importFrom logger log_info log_debug
+#' @importFrom logger log_info log_debug log_warn
 #' @export
 #'
 #' @examples
 #' \dontrun{
 #' # Assuming 'sc_data' is the output from parse_sc()
-#' filtered_data <- filter_sc(sc_data, uos = "ENVX2001", session = "S1C")
-#' specific_year_mode <- filter_sc(sc_data, year = 2025, mode = "ND")
+#' # Split columns and filter by UoS and Session
+#' filtered_data <- filter_sc(sc_data, uos_filter = "ENVX2001", session_filter = "S1C")
+#' # Split columns and filter by Year and Mode
+#' specific_year_mode <- filter_sc(sc_data, year_filter = 2025, mode_filter = "ND")
+#' # Just split columns without filtering
+#' split_only_data <- filter_sc(sc_data)
 #' }
-filter_sc <- function(data, uos = NULL, session = NULL, year = NULL, mode = NULL, location = NULL) {
+filter_sc <- function(data, uos_filter = NULL, session_filter = NULL, year_filter = NULL, mode_filter = NULL, location_filter = NULL) {
   logger::log_info("Starting filter_sc function.")
-  logger::log_info(paste("Initial row count:", nrow(data)))
+  logger::log_debug(paste("Initial dimensions:", paste(dim(data), collapse = "x")))
+
   if (!is.data.frame(data)) {
     stop("Input 'data' must be a data frame.")
   }
 
-  # --- Simplified availability column check ---
-  # Since parse_sc standardizes names, we expect "uo_s_availability"
   availability_col <- "uo_s_availability"
   if (!(availability_col %in% names(data))) {
     logger::log_warn(paste("Could not find the expected column:", availability_col, ". Returning original data frame."))
-    # Consider if this should be an error depending on requirements
-    # stop(paste("Essential column not found:", availability_col))
     return(data)
   }
-  logger::log_info(paste("Using availability column:", availability_col))
-  # --- End simplification ---
+  logger::log_info(paste("Found availability column:", availability_col))
 
+  # --- Split the availability column ---
+  new_cols <- c("uos", "session", "year", "mode", "location")
+  logger::log_debug(paste("Splitting", availability_col, "into:", paste(new_cols, collapse = ", ")))
 
-  # Check if any filtering arguments are provided
-  filter_args <- list(uos = uos, session = session, year = year, mode = mode, location = location)
-  active_filters <- names(filter_args)[!sapply(filter_args, is.null)]
-  if (length(active_filters) == 0) {
-    logger::log_info("No filters provided. Returning original data frame.")
-    return(data) # Return original data if no filters are applied
-  } else {
-    logger::log_info(paste("Applying filters for:", paste(active_filters, collapse = ", ")))
-  }
-
-  # Split the availability string
-  logger::log_debug("Splitting availability column.")
-  # Suppress warnings temporarily for cases where split doesn't yield 5 parts
-  split_data <- suppressWarnings(
-    stringr::str_split_fixed(data[[availability_col]], "-", 5)
+  # Use tryCatch to handle potential errors during separation gracefully
+  data_split <- tryCatch(
+    {
+      tidyr::separate(
+        data,
+        col = !!rlang::sym(availability_col),
+        into = new_cols,
+        sep = "-",
+        remove = FALSE, # Keep the original column
+        convert = TRUE, # Try converting year to numeric, etc.
+        fill = "right" # Handle cases with fewer than 5 parts
+      )
+    },
+    error = function(e) {
+      logger::log_warn(paste("Error during tidyr::separate:", e$message, ". Returning original data frame."))
+      return(data) # Return original data on error
+    }
   )
 
-  # Check if splitting resulted in 5 columns
-  if (ncol(split_data) != 5) {
-    logger::log_warn("Availability column format is inconsistent. Expected 5 parts separated by hyphens. Filtering may be unreliable. Returning original data frame.")
+  # Check if the separation returned the original data due to an error
+  if (identical(data_split, data) && !(availability_col %in% names(data))) {
+    # This condition means an error occurred in tryCatch and original data was returned
+    # but the original data didn't have the column to begin with (already handled above, but double-check)
     return(data)
+  } else if (identical(data_split, data) && (availability_col %in% names(data))) {
+    # This condition means an error occurred in tryCatch and original data was returned
+    logger::log_warn("Separation failed, returning original data frame.")
+    return(data)
+  } else {
+    # Separation was successful (or partially successful with fill='right')
+    data <- data_split
+    logger::log_debug(paste("Dimensions after splitting:", paste(dim(data), collapse = "x")))
   }
 
-  # Add temporary columns for filtering
-  temp_cols <- c(".uos_temp", ".session_temp", ".year_temp", ".mode_temp", ".location_temp")
-  data[, temp_cols] <- split_data
-  # Ensure year is numeric for comparison if year filter is numeric
-  if (!is.null(year) && is.numeric(year)) {
-    data$.year_temp <- suppressWarnings(as.numeric(data$.year_temp))
-  } else if (!is.null(year)) { # Ensure year filter is character if provided as character
-    year <- as.character(year)
-  }
+  # --- Reorder columns ---
+  # Place new columns right after the original availability column
+  logger::log_debug("Relocating new columns.")
+  data <- dplyr::relocate(data, dplyr::all_of(new_cols), .after = !!rlang::sym(availability_col))
 
+  # --- Apply Filters ---
+  filter_args <- list(uos = uos_filter, session = session_filter, year = year_filter, mode = mode_filter, location = location_filter)
+  active_filters <- names(filter_args)[!sapply(filter_args, is.null)]
 
-  # Apply filters iteratively
-  filtered_data <- data
-  if (!is.null(uos)) {
-    filtered_data <- dplyr::filter(filtered_data, .data$.uos_temp == uos)
-  }
-  if (!is.null(session)) {
-    filtered_data <- dplyr::filter(filtered_data, .data$.session_temp == session)
-  }
-  if (!is.null(year)) {
-    # Handle potential NA from conversion if year filter was numeric but column wasn't
-    if (is.numeric(year)) {
-      filtered_data <- dplyr::filter(filtered_data, !is.na(.data$.year_temp) && .data$.year_temp == year)
-    } else {
-      filtered_data <- dplyr::filter(filtered_data, .data$.year_temp == year)
+  if (length(active_filters) == 0) {
+    logger::log_info("No filters provided. Returning data frame with split columns.")
+  } else {
+    logger::log_info(paste("Applying filters for:", paste(active_filters, collapse = ", ")))
+
+    # Ensure year filter is handled correctly (numeric vs character)
+    # Convert year column to character for robust comparison if year_filter is character
+    if (!is.null(year_filter) && !is.numeric(year_filter)) {
+      data <- dplyr::mutate(data, year = as.character(.data$year))
+      year_filter <- as.character(year_filter)
+      logger::log_debug("Converted year column and filter to character for comparison.")
+    } else if (!is.null(year_filter) && is.numeric(year_filter)) {
+      # Ensure the column is numeric if the filter is numeric
+      # suppressWarnings handles cases where conversion might fail
+      data <- dplyr::mutate(data, year = suppressWarnings(as.numeric(.data$year)))
+      logger::log_debug("Ensured year column is numeric for comparison.")
     }
-  }
-  if (!is.null(mode)) {
-    filtered_data <- dplyr::filter(filtered_data, .data$.mode_temp == mode)
-  }
-  if (!is.null(location)) {
-    filtered_data <- dplyr::filter(filtered_data, .data$.location_temp == location)
+
+    initial_filter_rows <- nrow(data)
+
+    if (!is.null(uos_filter)) {
+      data <- dplyr::filter(data, .data$uos == uos_filter)
+    }
+    if (!is.null(session_filter)) {
+      data <- dplyr::filter(data, .data$session == session_filter)
+    }
+    if (!is.null(year_filter)) {
+      # Filter, handling potential NAs introduced by conversion
+      data <- dplyr::filter(data, !is.na(.data$year) & .data$year == year_filter)
+    }
+    if (!is.null(mode_filter)) {
+      data <- dplyr::filter(data, .data$mode == mode_filter)
+    }
+    if (!is.null(location_filter)) {
+      data <- dplyr::filter(data, .data$location == location_filter)
+    }
+    logger::log_debug(paste("Rows before filtering:", initial_filter_rows, "- Rows after filtering:", nrow(data)))
   }
 
-  # Remove temporary columns
-  filtered_data <- dplyr::select(filtered_data, -dplyr::all_of(temp_cols))
-
-  logger::log_info(paste("Final row count:", nrow(filtered_data)))
+  logger::log_info(paste("Final row count:", nrow(data)))
+  logger::log_debug(paste("Final dimensions:", paste(dim(data), collapse = "x")))
   logger::log_info("Finished filter_sc function.")
-  return(filtered_data)
+
+  # Return only the modified data frame
+  return(data)
 }
