@@ -16,6 +16,7 @@
 #'   if validation fails or no matching records are found.
 #' @importFrom logger log_debug log_error
 #' @importFrom tibble as_tibble
+#' @export
 process_extensions <- function(data, ap = NULL, assessment) {
   logger::log_debug("Entering process_extensions function.")
   logger::log_debug("Input data dimensions: ", paste(dim(data), collapse = "x"))
