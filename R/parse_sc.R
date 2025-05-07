@@ -22,20 +22,69 @@ parse_sc <- function(x) {
     stop("Unsupported file format. Only CSV and XLSX files are supported.")
   )
 
-  # --- Standardise column names ---
-  expected_cols <- 22
-  if (ncol(df) != expected_cols) {
-    stop(paste("Expected", expected_cols, "columns, but found", ncol(df), "in file:", x))
+
+
+  # --- Define required columns and mappings ---
+  csv_required <- c(
+    "state",
+    "availability",
+    "assessment",
+    "due_date",
+    "u_ticket_contact",
+    "u_outcome_type",
+    "extension_in_calendar_days"
+  )
+
+  excel_required <- c(
+    "State",
+    "UoS (availability)",
+    "Assessment",
+    "Assessment Due Date",
+    "Student",
+    "Outcome type",
+    "Revised Due Date"
+  )
+
+  # Check for required columns based on file type
+  required_cols <- if (file_ext == "csv") csv_required else excel_required
+  missing_cols <- setdiff(required_cols, names(df))
+
+  if (length(missing_cols) > 0) {
+    stop(paste("Missing required columns:", paste(missing_cols, collapse = ", ")))
   }
 
-  names(df) <- c(
-    "number", "state", "classification", "school", "uo_s_availability",
-    "assessment_category", "assessment_type", "assessment_title", "assessment",
-    "alternate_consideration", "closing_date", "assessment_due_date",
-    "teacher_coordinator", "student", "student_id", "outcome_type",
-    "revised_due_date", "affected_end", "affected_start", "created",
-    "updated_by", "updated"
-  )
+  # Log the number of columns found
+  logger::log_info(paste("Found", ncol(df), "columns in file"))
+
+  # Create standardized column mapping
+  col_mapping <- if (file_ext == "csv") {
+    c(
+      state = "state",
+      uo_s_availability = "availability",
+      assessment = "assessment",
+      assessment_due_date = "due_date",
+      student = "u_ticket_contact",
+      outcome_type = "u_outcome_type",
+      revised_due_date = "extension_in_calendar_days"
+    )
+  } else {
+    c(
+      state = "State",
+      uo_s_availability = "UoS (availability)",
+      assessment = "Assessment",
+      assessment_due_date = "Assessment Due Date",
+      student = "Student",
+      outcome_type = "Outcome type",
+      revised_due_date = "Revised Due Date"
+    )
+  }
+
+  # Rename columns based on mapping
+  for (std_name in names(col_mapping)) {
+    if (col_mapping[[std_name]] %in% names(df)) {
+      names(df)[names(df) == col_mapping[[std_name]]] <- std_name
+    }
+  }
 
 
   if (is.character(df$revised_due_date)) {
