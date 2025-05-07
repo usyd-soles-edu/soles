@@ -68,7 +68,6 @@ merge_ap_extensions <- function(df, ap_path = NULL) {
     stop("Input data frame 'df' is missing required columns: ", paste(missing_cols, collapse = ", "))
   }
 
-
   # --- Helper function to get the most frequent value ---
   get_most_common <- function(vec) {
     if (length(vec) > 0 & !all(is.na(vec))) {
@@ -118,6 +117,7 @@ merge_ap_extensions <- function(df, ap_path = NULL) {
       stop("Error reading or parsing the Academic Plan file.")
     }
   )
+  logger::log_info("Read {nrow(ap_raw)} raw rows from Academic Plan file.") # DEBUG: Show raw row count
 
   # Check if essential columns exist in ap_raw before proceeding
   required_ap_cols <- c(
@@ -130,28 +130,30 @@ merge_ap_extensions <- function(df, ap_path = NULL) {
     stop("Academic Plan data is missing required columns: ", paste(missing_ap_cols, collapse = ", "))
   }
 
-
   # Filter AP data to only include rows with quantifiable extensions
   initial_ap_rows <- nrow(ap_raw)
   ap_filtered_extensions <- ap_raw |>
     dplyr::filter(
-      stringr::str_detect(`Assessment Adjustment - Assignment Extension`, stringr::regex("Up to \\\\d+ (day|week)s?", ignore_case = TRUE))
+      grepl("Up to", `Assessment Adjustment - Assignment Extension`, ignore.case = TRUE) # Use simpler grepl filter
     )
   rows_removed <- initial_ap_rows - nrow(ap_filtered_extensions)
   if (rows_removed > 0) {
     logger::log_info("Removed {rows_removed} AP entries lacking specific 'Up to [number] day/week' extension format.")
   }
+  logger::log_info("Rows after filtering for extension format: {nrow(ap_filtered_extensions)}") # DEBUG: Show count after first filter
 
-
-  logger::log_info("Processing Academic Plan data...")
-  ap_processed <- ap_filtered_extensions |>
+  logger::log_info("Filtering Academic Plan data based on derived context...") # Changed log message slightly
+  ap_context_filtered <- ap_filtered_extensions |>
     # Filter AP data based on context derived from df
     dplyr::filter(
-      Year == as.integer(year), # Convert context year back to integer for filtering AP data
+      Year == year, # Compare Year directly with character context year
       Session == session,
       `UoS Code` == uos,
       Assessment == assessment
-    ) |>
+    )
+  logger::log_info("Rows after filtering by context: {nrow(ap_context_filtered)}") # DEBUG: Show count after context filter
+
+  ap_processed <- ap_context_filtered |> # Continue pipeline from temp variable
     # Calculate extension duration and revised due date
     dplyr::mutate(
       extension_in_days = dplyr::case_when(
@@ -172,20 +174,21 @@ merge_ap_extensions <- function(df, ap_path = NULL) {
         due_date + as.difftime(extension_in_days, units = "days"),
         as.Date(NA)
       )
-    ) |>
-    # Standardize columns to match/augment df structure
-    dplyr::mutate(
-      state = `Assessment Adjustment - Assignment Extension`, # Keep original text
-      # Use first value from df as context for these potentially constant columns
-      uo_s_availability = if ("uo_s_availability" %in% names(df)) df$uo_s_availability[1] else NA_character_,
-      mode = if ("mode" %in% names(df)) df$mode[1] else NA_character_,
-      location = if ("location" %in% names(df)) df$location[1] else NA_character_,
-      assessment_due_date = due_date, # Assign the common due date from df
-      outcome_type = "Academic Plan", # Hardcode origin
-      name = paste0(`Preferred Name`, " ", `Family Name`),
-      # Ensure year is character for binding with df$year (which came from get_most_common)
-      year = as.character(Year)
-    ) |>
+    )
+
+  # Standardize columns to match/augment df structure
+  ap_processed <- dplyr::mutate(ap_processed,
+    state = `Assessment Adjustment - Assignment Extension`, # Keep original text
+    # Use first value from df as context for these potentially constant columns
+    uo_s_availability = if ("uo_s_availability" %in% names(df)) df$uo_s_availability[1] else NA_character_,
+    mode = if ("mode" %in% names(df)) df$mode[1] else NA_character_,
+    location = if ("location" %in% names(df)) df$location[1] else NA_character_,
+    assessment_due_date = due_date, # Assign the common due date from df
+    outcome_type = "Academic Plan", # Hardcode origin
+    name = paste0(`Preferred Name`, " ", `Family Name`),
+    # Ensure year is character for binding with df$year (which came from get_most_common)
+    year = as.character(Year)
+  ) |>
     # Select and rename columns for the final structure before binding
     dplyr::select(
       state,
@@ -212,7 +215,6 @@ merge_ap_extensions <- function(df, ap_path = NULL) {
   # This handles cases where ap_processed might be empty after filtering
   df <- ensure_output_cols(df)
 
-
   # Ensure column types are compatible before binding (especially important columns)
   # We already handled 'year' (character). Check others if needed.
   # Example: Ensure 'assessment_due_date' is Date in both
@@ -225,11 +227,9 @@ merge_ap_extensions <- function(df, ap_path = NULL) {
     logger::log_info("Converted 'assessment_due_date' in ap_processed to Date type.")
   }
 
-
   logger::log_info("Combining original data ({nrow(df)} rows) and processed AP data ({nrow(ap_processed)} rows).")
   combined_data <- dplyr::bind_rows(df, ap_processed)
 
   logger::log_info("Finished combining data. Total rows: {nrow(combined_data)}.")
-
   return(combined_data)
 }
