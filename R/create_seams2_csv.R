@@ -23,6 +23,7 @@
 #' @importFrom logger log_info log_error
 #' @importFrom tibble as_tibble
 #'
+#' @export
 #' @examples
 #' \dontrun{
 #' # Assuming 'processed_data' is the output from process_extensions()
