@@ -149,7 +149,7 @@ merge_ap_extensions <- function(df, ap_path = NULL) {
       Year == year, # Compare Year directly with character context year
       Session == session,
       `UoS Code` == uos,
-      Assessment == assessment
+      tolower(Assessment) == tolower(assessment)
     )
   logger::log_info("Rows after filtering by context: {nrow(ap_context_filtered)}") # DEBUG: Show count after context filter
 
