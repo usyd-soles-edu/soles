@@ -19,7 +19,7 @@
 #'   If `write_csv` is `TRUE`, the function also attempts to write this data to
 #'   the specified CSV file (writing `NA` values as blank strings), logging
 #'   success or failure messages.
-#' @importFrom utils write.csv
+#' @importFrom readr write_csv
 #' @importFrom logger log_info log_error
 #' @importFrom tibble as_tibble
 #'
@@ -105,9 +105,9 @@ create_seams2_csv <- function(data,
 
   # --- Prepare Output Data Frame ---
   output_df <- data.frame(
-    "Section Id" = rep(NA_character_, nrow(data)), # Use NA for the data frame
+    "Section Id" = rep(NA, nrow(data)), # Use NA for the data frame
     "Section name" = section_name,
-    "Student name" = rep(NA_character_, nrow(data)), # Use NA for the data frame
+    "Student name" = rep(NA, nrow(data)), # Use NA for the data frame
     "UniKey" = data$unikey,
     stringsAsFactors = FALSE,
     check.names = FALSE # Prevent R from changing column names like "Section Id"
@@ -118,7 +118,7 @@ create_seams2_csv <- function(data,
     tryCatch(
       {
         output_path <- normalizePath(output_filename, mustWork = FALSE)
-        utils::write.csv(output_df, file = output_path, row.names = FALSE, na = "")
+        readr::write_csv(output_df, file = output_path, na = "")
         logger::log_info("SEAMS2 CSV file successfully written to: ", output_path)
         # Return value handled after the if/else block
       },
