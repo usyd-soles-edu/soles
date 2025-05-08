@@ -1,11 +1,11 @@
-
- 
- # Load necessary libraries
+# Load necessary libraries
 library(shiny)
 library(bslib)
 library(DT) # For data tables
 library(dplyr) # For glimpse()
 library(shinyjs) # For UI control
+library(stringr) # For str_detect
+library(logger) # For debug logging
 
 # Define UI using bslib::page_sidebar
 ui <- bslib::page_sidebar(
@@ -15,6 +15,7 @@ ui <- bslib::page_sidebar(
   sidebar = bslib::sidebar(
     width = 300, # Adjust width as needed, bslib uses pixels or css units
     style = "font-size: 0.9em;", # Make all text in sidebar smaller
+    shiny::p("Please upload unmodified files from both the UoS Dashboard and the Academic Plan portal. Manually edited files may not work as expected."),
     shiny::fileInput("sc_file", "Special Considerations file", multiple = FALSE, accept = c(".csv", ".xlsx")),
     shiny::fileInput("ap_file", "Academic Plan file (Optional)", multiple = FALSE, accept = c(".csv", ".xlsx")),
     shiny::fluidRow(
@@ -39,12 +40,14 @@ ui <- bslib::page_sidebar(
     shiny::downloadButton("download_csv", "Download CSV")
   ),
   # Main content area components go here
-  bslib::card(
-    bslib::card_header("Summary"),
-    bslib::card_body(
+  bslib::navset_card_tab(
+    height = "250px", # Adjusted height for tabs
+    id = "summary_debug_tabs",
+    bslib::nav_panel(
+      title = "Summary",
       # Privacy notice
       shiny::div(
-        class = "alert alert-secondary p-2",
+        class = "alert alert-secondary px-2 pt-2 pb-0",
         shiny::tags$p(
           shiny::icon("info-circle"),
           shiny::tags$strong(" Data Privacy:"),
@@ -54,6 +57,10 @@ ui <- bslib::page_sidebar(
       ),
       # Statistics grid
       shiny::uiOutput("summary_stats")
+    ),
+    bslib::nav_panel(
+      title = "Debug",
+      shiny::verbatimTextOutput("debug_log_output")
     )
   ),
   # Output card with tabs, visible immediately
@@ -74,9 +81,11 @@ ui <- bslib::page_sidebar(
 
 # Define Server logic
 server <- function(input, output, session) {
+  shinyjs::disable("download_csv") # Ensure button is disabled at startup
   # Reactive values to store processed data and statistics
   processed_data <- reactiveVal(NULL)
   seams2_data <- reactiveVal(NULL)
+  debug_logs <- reactiveVal("") # For storing debug logs
 
   # Reactive values for statistics
   stats <- reactiveValues(
@@ -85,6 +94,25 @@ server <- function(input, output, session) {
     total_sections = "NA",
     total_students = "NA"
   )
+
+  # Configure logger to capture logs into a reactiveVal
+  # This ensures that log messages are displayed in the UI
+  log_appender(function(lines) {
+    # Prepend new logs to existing ones, ensuring it's a single string
+    current_logs <- isolate(debug_logs())
+    new_logs <- paste(lines, collapse = "\n")
+    updated_logs <- paste(new_logs, current_logs, sep = "\n")
+
+    # Limit log length to avoid performance issues (e.g., last 100 lines)
+    max_log_lines <- 100
+    log_lines_list <- unlist(strsplit(updated_logs, "\n"))
+    if (length(log_lines_list) > max_log_lines) {
+      log_lines_list <- tail(log_lines_list, max_log_lines)
+    }
+    debug_logs(paste(log_lines_list, collapse = "\n"))
+  })
+  log_threshold(INFO) # Set the minimum log level to capture (e.g., INFO, DEBUG)
+  logger::log_info("Shiny session started. Logger initialized.")
 
   # Reactive expression to parse the special considerations file
   parsed_sc_data <- reactive({
@@ -104,92 +132,36 @@ server <- function(input, output, session) {
     )
   })
 
-  # Observer to update statistics when data or filters change
+  # Observer to update statistics based on SEAMS2 data
   observe({
-    # Get unfiltered SC data first (before assessment filter)
-    sc_data <- parsed_sc_data()
-    # Get SEAMS2 data if available
-    seams2_result <- seams2_data()
+    seams2_result <- seams2_data() # This is a reactiveVal containing the SEAMS2 output
 
-    # Update Special Considerations count
-    if (!is.null(sc_data) && nrow(sc_data) > 0) {
-      # Apply only UoS/Session/Year filters for accurate total
-      filtered_sc <- sc_data
-      if (!is.null(input$unit_filter)) {
-        filtered_sc <- filtered_sc[filtered_sc$uos == input$unit_filter, ]
-      }
-      if (!is.null(input$session_filter)) {
-        filtered_sc <- filtered_sc[filtered_sc$session == input$session_filter, ]
-      }
-      if (!is.null(input$year_filter)) {
-        filtered_sc <- filtered_sc[filtered_sc$year == input$year_filter, ]
-      }
-      if (nrow(filtered_sc) > 0) {
-        # Check for SID column variations and handle missing case
-        if ("SID" %in% names(filtered_sc)) {
-          stats$total_sc <- length(unique(filtered_sc$SID))
-        } else if ("sid" %in% names(filtered_sc)) {
-          stats$total_sc <- length(unique(filtered_sc$sid))
-        } else {
-          stats$total_sc <- "NA"
-          warning("No SID column found in special considerations data")
-        }
-      }
-    }
-
-    # Update Total Sections count
     if (!is.null(seams2_result) && nrow(seams2_result) > 0) {
-      if ("Section name" %in% names(seams2_result) &&
-        any(!is.na(seams2_result$`Section name`) &
-          nzchar(trimws(seams2_result$`Section name`)))) {
-        stats$total_sections <- length(unique(seams2_result$`Section name`[
-          !is.na(seams2_result$`Section name`) &
-            nzchar(trimws(seams2_result$`Section name`))
-        ]))
-      }
-    }
+      # Total Students (Spec Cons + Plans)
+      stats$total_students <- nrow(seams2_result)
 
-    # Update AP stats
-    if (!is.null(input$ap_file) && !is.null(input$ap_file$datapath)) {
-      ap_data <- tryCatch(
-        {
-          # Parse and filter AP data using package functions
-          ap_base <- soles::parse_ap(input$ap_file$datapath)
-          soles::filter_ap(ap_base,
-            uos_filter = input$unit_filter,
-            session_filter = input$session_filter,
-            year_filter = input$year_filter
-          )
-        },
-        error = function(e) {
-          showNotification(paste("Error processing AP file for stats:", e$message), type = "warning")
-          NULL
-        }
-      )
+      # Total students with disability plans
+      # Assumes "Academic Plan" is present in 'Section name' for these students
+      ap_rows <- dplyr::filter(seams2_result, stringr::str_detect(`Section name`, "Academic Plan"))
+      stats$total_ap <- nrow(ap_rows)
 
-      if (!is.null(ap_data) && nrow(ap_data) > 0) {
-        # Check for SID column variations and handle missing case
-        if ("SID" %in% names(ap_data)) {
-          stats$total_ap <- length(unique(ap_data$SID))
-        } else if ("sid" %in% names(ap_data)) {
-          stats$total_ap <- length(unique(ap_data$sid))
-        } else {
-          stats$total_ap <- "NA"
-          warning("No SID column found in academic plans data")
-        }
-      }
-    }
+      # Total students with special consideration (excluding those only with disability plans)
+      # This counts rows that DO NOT have "Academic Plan" in their section name.
+      # If a student has both SC and AP, they might be counted here if their SC-related entry
+      # doesn't mention "Academic Plan" in its "Section name".
+      # The user's example implies this logic: total - AP = SC.
+      # Or, more directly, those whose section name does NOT contain "Academic Plan".
+      sc_rows <- dplyr::filter(seams2_result, !stringr::str_detect(`Section name`, "Academic Plan"))
+      stats$total_sc <- nrow(sc_rows)
 
-    # Update total students
-    # If both are "NA", result is "NA"
-    if (!is.numeric(stats$total_sc) && !is.numeric(stats$total_ap)) {
-      stats$total_students <- "NA"
+      # Total sections
+      stats$total_sections <- length(unique(seams2_result$`Section name`))
     } else {
-      # If at least one is numeric, add them (treating non-numeric as 0)
-      sc_count <- if (is.numeric(stats$total_sc)) stats$total_sc else 0
-      ap_count <- if (is.numeric(stats$total_ap)) stats$total_ap else 0
-      # Only show total if it's greater than 0
-      stats$total_students <- if (sc_count + ap_count > 0) sc_count + ap_count else "NA"
+      # Reset stats if no SEAMS2 data
+      stats$total_sc <- "NA"
+      stats$total_ap <- "NA"
+      stats$total_sections <- "NA"
+      stats$total_students <- "NA"
     }
   })
 
@@ -197,7 +169,7 @@ server <- function(input, output, session) {
   output$summary_stats <- renderUI({
     # Create formatted statistics display using reactive values
     shiny::div(
-      class = "row row-cols-2 g-4 mt-2",
+      class = "row row-cols-2 g-4 mt-0",
       # Special Considerations Count
       shiny::div(
         class = "col",
@@ -207,7 +179,7 @@ server <- function(input, output, session) {
             class = "card-body text-center",
             shiny::tags$h3(
               class = "card-title mb-0",
-              style = "font-size: 1.5rem;",
+              style = "font-size: 1.2rem;",
               stats$total_sc
             ),
             shiny::tags$p(
@@ -227,7 +199,7 @@ server <- function(input, output, session) {
             class = "card-body text-center",
             shiny::tags$h3(
               class = "card-title mb-0",
-              style = "font-size: 1.5rem;",
+              style = "font-size: 1.2rem;",
               stats$total_ap
             ),
             shiny::tags$p(
@@ -247,7 +219,7 @@ server <- function(input, output, session) {
             class = "card-body text-center",
             shiny::tags$h3(
               class = "card-title mb-0",
-              style = "font-size: 1.5rem;",
+              style = "font-size: 1.2rem;",
               stats$total_sections
             ),
             shiny::tags$p(
@@ -267,7 +239,7 @@ server <- function(input, output, session) {
             class = "card-body text-center",
             shiny::tags$h3(
               class = "card-title mb-0",
-              style = "font-size: 1.5rem;",
+              style = "font-size: 1.2rem;",
               stats$total_students
             ),
             shiny::tags$p(
@@ -339,8 +311,18 @@ server <- function(input, output, session) {
         !is.null(input$assessment_filter)
     )
 
-    # Disable download button if no processed data
-    shinyjs::toggleState("download_csv", !is.null(processed_data()))
+    # Disable download button if no data for the selected type
+    download_ready <- FALSE
+    if (!is.null(input$download_type)) { # Ensure input$download_type is available
+      if (input$download_type == "seams2") {
+        s2_data <- seams2_data()
+        download_ready <- !is.null(s2_data) && nrow(s2_data) > 0
+      } else { # Assumes "raw" if not "seams2"
+        p_data <- processed_data()
+        download_ready <- !is.null(p_data) && nrow(p_data) > 0
+      }
+    }
+    shinyjs::toggleState("download_csv", download_ready)
   })
 
   # Reactive expression for filtered data based on current selections
@@ -555,9 +537,15 @@ server <- function(input, output, session) {
       }
 
       # Write to CSV
-      write.csv(data, file, row.names = FALSE)
+      write.csv(data, file, row.names = FALSE, na = "")
     }
   )
+
+  # Render the debug log output
+  output$debug_log_output <- renderPrint({
+    req(debug_logs())
+    cat(debug_logs())
+  })
 }
 
 # Return the shiny app object
