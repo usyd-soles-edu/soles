@@ -469,5 +469,5 @@ create_eoi_profile <- function(applicant_data) {
 
   cat(profile_string)
   cat("\n")
-  return(profile_string)
+  return(invisible(profile_string))
 }
