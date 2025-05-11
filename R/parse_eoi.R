@@ -133,22 +133,122 @@ eoi_extract <- function(df) {
 }
 
 
+#' Download Processed EOI Data to CSV Files
+#'
+#' Saves a list of data frames (processed EOI data), each corresponding to a
+#' unit of study, into separate CSV files. Files are organized into
+#' subdirectories named after sanitized unit codes, within a specified save path.
+#'
+#' @param processed_eoi_data A named list of data frames. Each name is a unit
+#'   code, and each data frame contains the processed EOI data for that unit.
+#'   This is typically the output from \code{\link{process_eoi_data}}.
+#' @param save_path A character string; the path to the main output
+#'   directory where unit-specific subdirectories and CSV files will be created.
+#'   If \code{NULL}, a warning is logged and no files are saved.
+#' @return Invisibly returns \code{NULL}. This function is used for its side
+#'   effect of writing files.
+#' @importFrom readr write_csv
+#' @importFrom logger log_info log_debug log_warn log_error
+#' @export
+download_eoi_data <- function(processed_eoi_data, save_path) {
+  logger::log_debug(sprintf(
+    "Entering download_eoi_data. save_path: %s. Number of data frames in list: %d",
+    ifelse(is.null(save_path), "NULL", save_path), length(processed_eoi_data)
+  ))
+
+  if (is.null(save_path)) {
+    logger::log_warn("save_path is NULL in download_eoi_data. No files will be saved.")
+    return(invisible(NULL))
+  }
+
+  if (!dir.exists(save_path)) {
+    logger::log_info(sprintf("Main output directory does not exist. Creating: %s", save_path))
+    tryCatch(
+      {
+        dir.create(save_path, recursive = TRUE, showWarnings = FALSE)
+        logger::log_info(sprintf("Created main output directory: %s", save_path))
+      },
+      error = function(e) {
+        logger::log_error(sprintf("Failed to create main output directory %s: %s", save_path, e$message))
+        stop(sprintf("Failed to create main output directory %s: %s", save_path, e$message))
+      }
+    )
+  }
+
+  if (length(processed_eoi_data) > 0) {
+    logger::log_info(sprintf("Starting to save %d data frame(s) to disk in %s.", length(processed_eoi_data), save_path))
+
+    for (unit_name in names(processed_eoi_data)) {
+      df_to_save <- processed_eoi_data[[unit_name]]
+      logger::log_debug(sprintf("Processing unit for saving: '%s'", unit_name))
+
+      sanitized_unit_name <- gsub("[^A-Za-z0-9_.-]+", "_", unit_name)
+      sanitized_unit_name <- gsub("^_+|_+$", "", sanitized_unit_name)
+      logger::log_debug(sprintf("Sanitized unit name: '%s' (from original: '%s')", sanitized_unit_name, unit_name))
+
+      if (nchar(sanitized_unit_name) == 0) {
+        logger::log_warn(sprintf("Sanitized unit name for '%s' is empty. Using 'unnamed_unit'.", unit_name))
+        sanitized_unit_name <- "unnamed_unit"
+      }
+
+      unit_specific_dir <- file.path(save_path, sanitized_unit_name)
+
+      if (!dir.exists(unit_specific_dir)) {
+        logger::log_info(sprintf("Unit specific directory does not exist. Creating: %s", unit_specific_dir))
+        tryCatch(
+          {
+            dir.create(unit_specific_dir, recursive = TRUE, showWarnings = FALSE)
+            logger::log_info(sprintf("Created subdirectory: %s", unit_specific_dir))
+          },
+          error = function(e) {
+            logger::log_error(sprintf("Failed to create unit specific directory %s: %s", unit_specific_dir, e$message))
+            # Decide if we should stop or just warn and continue for other units
+            warning(sprintf("Failed to create directory for unit %s (%s). Skipping saving for this unit. Error: %s", unit_name, unit_specific_dir, e$message))
+            next # Skip to the next unit in the loop
+          }
+        )
+      }
+
+      csv_file_path <- file.path(unit_specific_dir, paste0(sanitized_unit_name, "_data.csv"))
+      logger::log_debug(sprintf("Target CSV file path: %s", csv_file_path))
+
+      if (nrow(df_to_save) > 0) {
+        tryCatch(
+          {
+            readr::write_csv(df_to_save, csv_file_path)
+            logger::log_info(sprintf("Saved %d rows for unit '%s' to: %s", nrow(df_to_save), unit_name, csv_file_path))
+          },
+          error = function(e) {
+            logger::log_error(sprintf("Failed to write CSV for unit %s to %s: %s", unit_name, csv_file_path, e$message))
+            warning(sprintf("Failed to write CSV for unit %s to %s. Error: %s", unit_name, csv_file_path, e$message))
+          }
+        )
+      } else {
+        logger::log_info(sprintf("No data to save for unit '%s' (as '%s') - data frame is empty. Skipping file creation at %s.", unit_name, sanitized_unit_name, csv_file_path))
+      }
+    }
+    logger::log_info("All data frames have been processed for saving.")
+  } else {
+    logger::log_warn("The 'processed_eoi_data' input to download_eoi_data is empty. No files will be saved.")
+  }
+  logger::log_debug("Exiting download_eoi_data function.")
+  return(invisible(NULL))
+}
+
 #' Process EOI Data by Preferred Units
 #'
 #' Filters Expression of Interest (EOI) data based on a list of unique
 #' preferred units of study. For each unit, it creates a subset of the EOI
-#' data containing applicants who listed that unit. Each subset is then saved
-#' as a CSV file in a unit-specific subdirectory within a main output directory.
+#' data containing applicants who listed that unit.
 #'
 #' @param df A data frame or tibble; the EOI data to be processed. Must contain
 #'   a column named 'preferred_units'.
 #' @param unit_list A character vector of unique unit codes to filter by.
 #'   Typically generated by \code{\link{eoi_extract}}.
-#' @param save_path A character string; the path to the main output directory
-#'   where unit-specific subdirectories and CSV files will be created.
-#' @return Invisibly returns a list of data frames, where each element is named
-#'   after a unit code and contains the filtered data for that unit.
-#' @importFrom readr write_csv
+#' @return A named list of data frames, where each element is named
+#'   after a unit code and contains the filtered EOI data for that unit.
+#'   The list can be passed to \code{\link{download_eoi_data}} for saving.
+#' @importFrom logger log_info log_debug log_warn log_error
 #' @export
 #' @examples
 #' \dontrun{
@@ -158,95 +258,65 @@ eoi_extract <- function(df) {
 #' #   stringsAsFactors = FALSE
 #' # )
 #' # mock_units <- c("INFO1111", "COMP2222", "DATA3333")
-#' # temp_output_dir <- tempfile("eoi_output_")
-#' # # dir.create(temp_output_dir) # process_eoi_data creates it
 #' #
-#' # filtered_results <- process_eoi_data(mock_eoi_data, mock_units, temp_output_dir)
+#' # # Process data
+#' # processed_data <- process_eoi_data(mock_eoi_data, mock_units)
+#' # print(names(processed_data))
 #' #
-#' # list.files(temp_output_dir, recursive = TRUE)
-#' # # Should show files like:
-#' # # INFO1111/INFO1111_data.csv
-#' # # COMP2222/COMP2222_data.csv
-#' # # DATA3333/DATA3333_data.csv
-#' #
-#' # unlink(temp_output_dir, recursive = TRUE) # Clean up
+#' # # Optionally, save the processed data
+#' # # temp_output_dir <- tempfile("eoi_output_")
+#' # # download_eoi_data(processed_data, temp_output_dir)
+#' # # list.files(temp_output_dir, recursive = TRUE)
+#' # # unlink(temp_output_dir, recursive = TRUE) # Clean up
 #' }
-process_eoi_data <- function(df, unit_list, save_path) {
+process_eoi_data <- function(df, unit_list) {
+  logger::log_debug("Starting process_eoi_data function.")
+  logger::log_debug(sprintf("Input df has %d rows and %d columns.", nrow(df), ncol(df)))
+  logger::log_debug(sprintf("Input unit_list contains: %s", paste(unit_list, collapse = ", ")))
+
   # Input validation
-  if (!is.data.frame(df)) stop("'df' must be a data frame.")
+  if (!is.data.frame(df)) {
+    logger::log_error("'df' must be a data frame.")
+    stop("'df' must be a data frame.")
+  }
   if (!"preferred_units" %in% colnames(df)) {
+    logger::log_error("The data frame 'df' does not contain a 'preferred_units' column.")
     stop("The data frame 'df' does not contain a 'preferred_units' column.")
   }
   if (!is.character(unit_list) && !is.null(unit_list)) { # Allow NULL unit_list
+    logger::log_error("'unit_list' must be a character vector or NULL.")
     stop("'unit_list' must be a character vector or NULL.")
-  }
-  if (!is.character(save_path) || length(save_path) != 1) {
-    stop("'save_path' must be a single character string.")
   }
 
   filtered_data_frames_by_unit <- list()
 
   if (is.null(unit_list) || length(unit_list) == 0 || nrow(df) == 0) {
     if (nrow(df) == 0) {
+      logger::log_warn("The input data frame ('df') is empty. No filtering performed.")
       warning("The input data frame ('df') is empty. No filtering performed.")
     }
     if (is.null(unit_list) || length(unit_list) == 0) {
+      logger::log_warn("The 'unit_list' vector is NULL or empty. No units to filter by.")
       warning("The 'unit_list' vector is NULL or empty. No units to filter by.")
     }
-    return(invisible(filtered_data_frames_by_unit))
+    logger::log_info("Returning empty list as no filtering can be done.")
+    return(filtered_data_frames_by_unit) # Return directly, not invisibly
   }
 
+  logger::log_info("Starting to filter data by unit list.")
   filtered_data_frames_by_unit <- lapply(unit_list, function(unit_name) {
+    logger::log_debug(sprintf("Filtering for unit: %s", unit_name))
     preferred_units_no_na <- ifelse(is.na(df$preferred_units), "", df$preferred_units)
     matching_rows_indices <- grepl(unit_name, preferred_units_no_na, fixed = TRUE)
-    df[matching_rows_indices, , drop = FALSE]
+    filtered_df_for_unit <- df[matching_rows_indices, , drop = FALSE]
+    logger::log_debug(sprintf("Found %d applicants for unit: %s", nrow(filtered_df_for_unit), unit_name))
+    return(filtered_df_for_unit)
   })
   names(filtered_data_frames_by_unit) <- unit_list
+  logger::log_info("Finished filtering data by unit list.")
 
-  if (!dir.exists(save_path)) {
-    dir.create(save_path, recursive = TRUE, showWarnings = FALSE)
-    if (interactive()) cat("Created main output directory:", save_path, "\n")
-  }
-
-  if (length(filtered_data_frames_by_unit) > 0) {
-    if (interactive()) cat("\nStarting to save filtered data frames...\n")
-
-    for (unit_name in names(filtered_data_frames_by_unit)) {
-      df_to_save <- filtered_data_frames_by_unit[[unit_name]]
-
-      # Sanitize unit_name for directory/file naming (original logic)
-      sanitized_unit_name <- gsub("[^A-Za-z0-9_.-]+", "_", unit_name)
-      sanitized_unit_name <- gsub("^_+|_+$", "", sanitized_unit_name) # Remove leading/trailing underscores
-
-      if (nchar(sanitized_unit_name) == 0) {
-        sanitized_unit_name <- "unnamed_unit"
-      }
-
-      unit_specific_dir <- file.path(save_path, sanitized_unit_name)
-
-      if (!dir.exists(unit_specific_dir)) {
-        dir.create(unit_specific_dir, recursive = TRUE, showWarnings = FALSE)
-        if (interactive()) cat("Created subdirectory:", unit_specific_dir, "\n")
-      }
-
-      csv_file_path <- file.path(unit_specific_dir, paste0(sanitized_unit_name, "_data.csv"))
-
-      if (nrow(df_to_save) > 0) {
-        readr::write_csv(df_to_save, csv_file_path)
-        if (interactive()) {
-          cat("Saved data for unit '", unit_name, "' (as '", sanitized_unit_name, "') to: ", csv_file_path, "\n")
-        }
-      } else {
-        if (interactive()) {
-          cat("No data to save for unit '", unit_name, "' (as '", sanitized_unit_name, "') - data frame is empty.\n")
-        }
-      }
-    }
-    if (interactive()) cat("\nAll data frames have been processed for saving.\n")
-  } else {
-    warning("The 'filtered_data_frames_by_unit' list is empty. No files will be saved.")
-  }
-  return(invisible(filtered_data_frames_by_unit))
+  logger::log_debug("Exiting process_eoi_data function.")
+  return(filtered_data_frames_by_unit) # Return the processed data directly
 }
 
 
