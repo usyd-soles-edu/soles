@@ -4,7 +4,7 @@
 \alias{download_eoi_data}
 \title{Download Processed EOI Data to CSV Files}
 \usage{
-download_eoi_data(processed_eoi_data, save_path)
+download_eoi_data(processed_eoi_data, save_path, uos = NULL)
 }
 \arguments{
 \item{processed_eoi_data}{A named list of data frames. Each name is a unit
@@ -14,6 +14,9 @@ This is typically the output from \code{\link{process_eoi_data}}.}
 \item{save_path}{A character string; the path to the main output
 directory where unit-specific subdirectories and CSV files will be created.
 If \code{NULL}, a warning is logged and no files are saved.}
+
+\item{uos}{Optional. A character vector of unit of study codes. If provided,
+only data for these units will be saved. If NULL (default), all data is saved.}
 }
 \value{
 Invisibly returns \code{NULL}. This function is used for its side

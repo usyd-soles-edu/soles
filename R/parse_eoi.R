@@ -145,12 +145,14 @@ eoi_extract <- function(df) {
 #' @param save_path A character string; the path to the main output
 #'   directory where unit-specific subdirectories and CSV files will be created.
 #'   If \code{NULL}, a warning is logged and no files are saved.
+#' @param uos Optional. A character vector of unit of study codes. If provided,
+#'   only data for these units will be saved. If NULL (default), all data is saved.
 #' @return Invisibly returns \code{NULL}. This function is used for its side
 #'   effect of writing files.
 #' @importFrom readr write_csv
 #' @importFrom logger log_info log_debug log_warn log_error
 #' @export
-download_eoi_data <- function(processed_eoi_data, save_path) {
+download_eoi_data <- function(processed_eoi_data, save_path, uos = NULL) {
   logger::log_debug(sprintf(
     "Entering download_eoi_data. save_path: %s. Number of data frames in list: %d",
     ifelse(is.null(save_path), "NULL", save_path), length(processed_eoi_data)
@@ -173,6 +175,47 @@ download_eoi_data <- function(processed_eoi_data, save_path) {
         stop(sprintf("Failed to create main output directory %s: %s", save_path, e$message))
       }
     )
+  }
+
+  # Filter processed_eoi_data if uos is provided and not empty
+  if (!is.null(uos) && length(uos) > 0) {
+    uos_filter <- as.character(uos) # Ensure character vector
+    logger::log_info(sprintf("Filtering EOI data. Requested UOS: %s", paste(uos_filter, collapse = ", ")))
+
+    original_names <- names(processed_eoi_data)
+
+    # Identify which of the requested UOS are actually present in the data
+    valid_uos_to_keep <- intersect(original_names, uos_filter)
+
+    # Filter the list
+    processed_eoi_data <- processed_eoi_data[valid_uos_to_keep]
+
+    # Log outcomes
+    kept_names <- names(processed_eoi_data) # Should be same as valid_uos_to_keep
+
+    if (length(kept_names) > 0) {
+      logger::log_debug(sprintf(
+        "Successfully filtered. Kept data for UOS: %s. Original count before filtering: %d, Count after filtering: %d.",
+        paste(kept_names, collapse = ", "),
+        length(original_names),
+        length(kept_names)
+      ))
+    } else {
+      logger::log_warn(sprintf(
+        "After filtering for requested UOS (%s), no matching data was found or kept. Original data had UOS: %s.",
+        paste(uos_filter, collapse = ", "),
+        if (length(original_names) > 0) paste(original_names, collapse = ", ") else "none"
+      ))
+    }
+
+    # Log any requested UOS that were not found in the original data
+    requested_but_not_in_original <- setdiff(uos_filter, original_names)
+    if (length(requested_but_not_in_original) > 0) {
+      logger::log_warn(sprintf(
+        "The following requested UOS were not found in the original 'processed_eoi_data' list: %s",
+        paste(requested_but_not_in_original, collapse = ", ")
+      ))
+    }
   }
 
   if (length(processed_eoi_data) > 0) {
