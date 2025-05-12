@@ -2,6 +2,7 @@
 library(shiny)
 library(bslib)
 library(soles) # Added for eoi_extract and other soles functions
+library(dplyr) # For mutate and filter operations
 # Ensure soles is available, though not explicitly loaded via library() here
 # as functions are called with soles::
 
@@ -12,64 +13,83 @@ ui <- bslib::page_fillable(
   shiny::tags$head(
     shiny::tags$style(shiny::HTML(
       ""
-    ))
+    )),
+    shiny::tags$style(shiny::HTML("
+      .small-box .inner > h3, .small-box .inner > p {
+        text-align: center;
+      }
+      .bslib-value-box .value-box-title {
+        text-align: center;
+        width: 100%;
+      }
+      .bslib-value-box .value-box-value {
+        text-align: center;
+        width: 100%; /* Ensure the container takes full width for centering */
+        font-family: 'Open Sans', sans-serif;
+        font-size: 150%;
+      }
+      /* Additional rule to ensure the textOutput itself is centered if it's an inline element */
+      .bslib-value-box .value-box-value > span {
+        display: inline-block; /* Allows text-align to work as expected */
+        width: 100%;
+      }
+    "))
+  ),
+  shiny::fileInput("eoi_file",
+    "Select CSV file",
+    multiple = FALSE,
+    width = "100%", # Adjusted for better fit in column
+    accept = c(
+      ".csv", "text/csv",
+      "text/comma-separated-values,text/plain"
+    )
+  ),
+  shiny::selectInput("unit_filter",
+    "Filter by Unit:",
+    choices = "ALL", # Initial choice
+    selected = "ALL",
+    width = "100%" # Adjusted for better fit in column
   ),
   bslib::layout_columns(
-    col_widths = c(6, 6),
+    col_widths = 12,
     bslib::card(
-      height = "200px",
-      bslib::card_header("Settings"),
-      bslib::card_body(
-        shiny::fileInput("eoi_file",
-          "Select CSV file",
-          multiple = FALSE,
-          width = "100%", # Adjusted for better fit in column
-          accept = c(
-            ".csv", "text/csv",
-            "text/comma-separated-values,text/plain"
-          )
-        ),
-        shiny::selectInput("unit_filter",
-          "Filter by Unit:",
-          choices = "ALL", # Initial choice
-          selected = "ALL",
-          width = "100%" # Adjusted for better fit in column
-        )
-      )
-    ),
-    bslib::card(
-      height = "200px",
+      style = "min-height: 200px;", # Set a minimum height for the card
       bslib::card_header("Summary"),
       bslib::card_body(
         bslib::layout_columns(
-          col_widths = c(6, 6), # Making value boxes appear 2 per row in the summary card
+          col_widths = bslib::breakpoints(sm = 12, md = 6, lg = 2), # Responsive widths for value boxes
           bslib::value_box(
-            title = "Total Applications",
+            title = "Total applications",
             value = shiny::textOutput("total_applications_output"),
             showcase = bsicons::bs_icon("people-fill")
           ),
           bslib::value_box(
-            title = "Unique units offered",
+            title = "Total units in list",
             value = shiny::textOutput("unique_units_output"),
             showcase = bsicons::bs_icon("card-list")
           ),
           bslib::value_box(
-            title = "Applicants with PhD",
+            title = "Returning staff",
+            value = shiny::textOutput("no_soles_experience_output"),
+            showcase = bsicons::bs_icon("person-badge")
+          ),
+          bslib::value_box(
+            title = "PhD holders",
             value = shiny::textOutput("phd_applicants_output"),
             showcase = bsicons::bs_icon("mortarboard-fill")
           ),
           bslib::value_box(
-            title = "No Prior SOLES Exp.",
-            value = shiny::textOutput("no_soles_experience_output"),
-            showcase = bsicons::bs_icon("person-badge")
+            title = "Completed training",
+            value = shiny::textOutput("completed_training_output"),
+            showcase = bsicons::bs_icon("person-check-fill") # New icon
           )
         )
       )
     )
   ),
   bslib::card(
-    height = "500px", # Set a fixed height for the card
-    bslib::card_header("Parsed data"),
+    height = "600px", # Set a fixed height for the card
+    bslib::card_header("Parsed output"),
     bslib::card_body(
       # scrollable = TRUE, # Removed as per prompt's guidance to apply to tab content
       bslib::navset_card_tab(
@@ -79,10 +99,30 @@ ui <- bslib::page_fillable(
           shiny::p("Results will be displayed here.")
         ),
         bslib::nav_panel(
-          title = "Raw output",
-          shiny::div(
-            style = "overflow-y: auto; max-height: 400px;", # Example for scrollability
-            shiny::verbatimTextOutput("parsed_eoi_data")
+          title = "Console output",
+          shiny::div( # Flex container for the entire tab panel content
+            style = "display: flex; flex-direction: column; height: 100%;", # Fill height, column layout
+            shiny::div( # Flex item (grows and scrolls)
+              style = "flex-grow: 1; overflow-y: auto; min-height: 0;", # Grow to fill, scroll if needed
+              shiny::verbatimTextOutput("parsed_eoi_data")
+            )
+          )
+        ),
+        bslib::nav_panel(
+          title = "Profiles",
+          shiny::div( # Flex container for the entire tab panel content
+            style = "display: flex; flex-direction: column; height: 100%;", # Fill height, column layout
+            shiny::selectizeInput("filter_name_input", # Flex item 1 (fixed size)
+              "Filter by Name:",
+              choices = c("Select a name" = ""), # Initial empty choice
+              selected = "", # Default to empty
+              width = "100%",
+              options = list(dropdownParent = "body")
+            ),
+            shiny::div( # Flex item 2 (grows and scrolls)
+              style = "flex-grow: 1; overflow-y: auto; min-height: 0;", # Grow to fill, scroll if needed
+              shiny::htmlOutput("profile_display_html")
+            )
           )
         )
       )
@@ -108,6 +148,12 @@ server <- function(input, output, session) {
     processed_data_reactive(NULL)
     # Explicitly provide label to ensure it's consistent
     shiny::updateSelectInput(session, "unit_filter", label = "Filter by Unit:", choices = "ALL", selected = "ALL")
+    shiny::updateSelectizeInput(session, "filter_name_input",
+      label = "Filter by Name:",
+      choices = c("Select a name" = ""),
+      selected = "",
+      server = TRUE
+    ) # Reset name filter on new file
 
     tryCatch(
       {
@@ -145,6 +191,109 @@ server <- function(input, output, session) {
         parsed_data_reactive(NULL) # Also clear parsed data on error
       }
     )
+  })
+
+  # Observe parsed_data_reactive to update name filter choices
+  shiny::observe({
+    data <- parsed_data_reactive()
+
+    if (!is.null(data) && is.data.frame(data) && nrow(data) > 0 &&
+      all(c("given_name", "surname") %in% names(data))) { # Check for column existence
+
+      data_with_fullname <- tryCatch(
+        {
+          data |> dplyr::mutate(full_name = paste(given_name, surname))
+        },
+        error = function(e) {
+          shiny::showNotification(paste("Error creating full_name column for name filter:", e$message), type = "warning")
+          return(NULL)
+        }
+      )
+
+      if (!is.null(data_with_fullname)) {
+        name_choices <- unique(data_with_fullname$full_name)
+        current_selection <- shiny::isolate(input$filter_name_input)
+        selected_choice <- if (!is.null(current_selection) && current_selection %in% name_choices) current_selection else ""
+
+        shiny::updateSelectizeInput(session, "filter_name_input",
+          choices = c("Select a name" = "", sort(name_choices)),
+          selected = selected_choice,
+          server = TRUE
+        )
+      } else {
+        # If data_with_fullname is NULL (error in mutate), reset choices
+        shiny::updateSelectizeInput(session, "filter_name_input",
+          choices = c("Select a name" = ""),
+          selected = "",
+          server = TRUE
+        )
+      }
+    } else {
+      # Reset/clear choices if data is not valid or name columns are missing
+      shiny::updateSelectizeInput(session, "filter_name_input",
+        choices = c("Select a name" = ""),
+        selected = "",
+        server = TRUE
+      )
+      if (!is.null(data) && is.data.frame(data) && nrow(data) > 0 &&
+        !all(c("given_name", "surname") %in% names(data))) {
+        shiny::showNotification("given_name and/or surname column not found in parsed data. Cannot populate name filter.", type = "warning")
+      }
+    }
+  })
+
+  # Reactive expression for the selected EOI profile
+  selected_profile_output <- shiny::reactive({
+    eoi_data <- parsed_data_reactive() # This is the direct output of parse_eoi()
+
+    # Guard clause for no data
+    if (is.null(eoi_data) || !is.data.frame(eoi_data) || nrow(eoi_data) == 0) {
+      return("Please upload and parse EOI data first.")
+    }
+
+    # Guard clause for missing essential name columns in the raw parsed data
+    if (!all(c("given_name", "surname") %in% names(eoi_data))) {
+      return("Essential columns (given_name, surname) are missing from the EOI data. Cannot proceed with name filtering or profile generation.")
+    }
+
+    # Guard clause for no name selected
+    if (is.null(input$filter_name_input) || input$filter_name_input == "") {
+      return("Please select a name from the settings to view their profile.")
+    }
+
+    # Create full_name column from the raw parsed_eoi_data for filtering
+    profile_data_base <- tryCatch(
+      {
+        eoi_data |> dplyr::mutate(full_name = paste(given_name, surname))
+      },
+      error = function(e) {
+        shiny::showNotification(paste("Error preparing data for profile generation (mutating full_name):", e$message), type = "error")
+        return(NULL)
+      }
+    )
+
+    if (is.null(profile_data_base)) {
+      return("An error occurred while preparing data for the profile. Check console for details.")
+    }
+
+    # Filter based on the selected full_name
+    profile_data_filtered <- profile_data_base |>
+      dplyr::filter(full_name == input$filter_name_input)
+
+    if (nrow(profile_data_filtered) == 1) {
+      tryCatch(
+        {
+          soles::create_eoi_profile(profile_data_filtered) # Pass the single filtered row
+        },
+        error = function(e) {
+          paste("Error generating profile with soles::create_eoi_profile:", e$message)
+        }
+      )
+    } else if (nrow(profile_data_filtered) == 0) {
+      "Selected name not found in the current data. The name list might be outdated or the name does not exist in the uploaded file."
+    } else {
+      "Multiple entries found for the selected name. This indicates an issue with data uniqueness or the filtering logic."
+    }
   })
 
   output$parsed_eoi_data <- shiny::renderPrint({
@@ -206,7 +355,7 @@ server <- function(input, output, session) {
       return("N/A")
     }
     phd_yes_data <- data[which(data$phd_conferred == "Yes"), ]
-    paste0(nrow(phd_yes_data), " / ", total_apps)
+    paste0(nrow(phd_yes_data), " (", round(nrow(phd_yes_data) / total_apps * 100, 0), " %)")
   })
 
   output$no_soles_experience_output <- shiny::renderText({
@@ -215,8 +364,36 @@ server <- function(input, output, session) {
     if (is.null(data) || !is.data.frame(data) || total_apps == 0 || !("previous_demonstrator" %in% names(data))) {
       return("N/A")
     }
-    no_exp_data <- data[which(data$previous_demonstrator == "No"), ]
-    paste0(nrow(no_exp_data), " / ", total_apps)
+    returning_staff_data <- data[which(data$previous_demonstrator == "Yes"), ]
+    paste0(nrow(returning_staff_data), " (", round(nrow(returning_staff_data) / total_apps * 100, 0), " %)")
+  })
+
+  output$completed_training_output <- shiny::renderText({
+    data <- parsed_data_reactive()
+    total_apps <- nrow(data)
+    if (is.null(data) || !is.data.frame(data) || total_apps == 0 || !("completed_training" %in% names(data))) {
+      return("N/A")
+    }
+    completed_training_yes_data <- data[which(data$completed_training == "Yes"), ]
+    completed_count <- nrow(completed_training_yes_data)
+    percentage <- if (total_apps > 0) (completed_count / total_apps) * 100 else 0
+    sprintf("%d (%.1f%%)", completed_count, percentage)
+  })
+
+  output$profile_display_html <- shiny::renderUI({
+    profile_content <- selected_profile_output()
+    if (is.character(profile_content)) {
+      # Ensure it's a single string first if it's a vector
+      profile_string <- paste(profile_content, collapse = "\n")
+      # Escape HTML special characters and then replace newlines with <br>
+      formatted_html <- gsub("\\n", "<br>", htmltools::htmlEscape(profile_string))
+      return(shiny::HTML(formatted_html))
+    } else if (is.null(profile_content)) {
+      return(shiny::HTML("<p><em>No profile to display.</em></p>")) # Using HTML entities for <p><em>
+    } else {
+      # Fallback for non-character types
+      return(shiny::HTML("<p><em>Profile content is not in a displayable text format.</em></p>")) # Using HTML entities
+    }
   })
 }
 
