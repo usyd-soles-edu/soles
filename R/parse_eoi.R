@@ -133,49 +133,29 @@ eoi_extract <- function(df) {
 }
 
 
-#' Download Processed EOI Data to CSV Files
+#' Prepare EOI Data for Archiving
 #'
-#' Saves a list of data frames (processed EOI data), each corresponding to a
-#' unit of study, into separate CSV files. Files are organized into
-#' subdirectories named after sanitized unit codes, within a specified save path.
+#' Processes a list of data frames (EOI data), generating in-memory CSV content
+#' for each. This is suitable for creating archives without disk I/O.
 #'
 #' @param processed_eoi_data A named list of data frames. Each name is a unit
 #'   code, and each data frame contains the processed EOI data for that unit.
-#'   This is typically the output from \code{\link{process_eoi_data}}.
-#' @param save_path A character string; the path to the main output
-#'   directory where unit-specific subdirectories and CSV files will be created.
-#'   If \code{NULL}, a warning is logged and no files are saved.
+#'   Typically the output from \code{\link{process_eoi_data}}.
 #' @param uos Optional. A character vector of unit of study codes. If provided,
-#'   only data for these units will be saved. If NULL (default), all data is saved.
-#' @return Invisibly returns \code{NULL}. This function is used for its side
-#'   effect of writing files.
-#' @importFrom readr write_csv
+#'   only data for these units will be processed. If NULL (default), all data is processed.
+#' @return A list of lists. Each inner list has:
+#'   \code{path}: Intended relative path in an archive (e.g., "UNIT_CODE/UNIT_CODE_data.csv").
+#'   \code{content}: CSV content as a character string.
+#' @importFrom readr format_csv
 #' @importFrom logger log_info log_debug log_warn log_error
 #' @export
-download_eoi_data <- function(processed_eoi_data, save_path, uos = NULL) {
+prepare_eoi <- function(processed_eoi_data, uos = NULL) {
   logger::log_debug(sprintf(
-    "Entering download_eoi_data. save_path: %s. Number of data frames in list: %d",
-    ifelse(is.null(save_path), "NULL", save_path), length(processed_eoi_data)
+    "Entering prepare_eoi. Number of data frames in list: %d",
+    length(processed_eoi_data)
   ))
 
-  if (is.null(save_path)) {
-    logger::log_warn("save_path is NULL in download_eoi_data. No files will be saved.")
-    return(invisible(NULL))
-  }
-
-  if (!dir.exists(save_path)) {
-    logger::log_info(sprintf("Main output directory does not exist. Creating: %s", save_path))
-    tryCatch(
-      {
-        dir.create(save_path, recursive = TRUE, showWarnings = FALSE)
-        logger::log_info(sprintf("Created main output directory: %s", save_path))
-      },
-      error = function(e) {
-        logger::log_error(sprintf("Failed to create main output directory %s: %s", save_path, e$message))
-        stop(sprintf("Failed to create main output directory %s: %s", save_path, e$message))
-      }
-    )
-  }
+  output_files <- list() # Initialize the list to store file path and content
 
   # Filter processed_eoi_data if uos is provided and not empty
   if (!is.null(uos) && length(uos) > 0) {
@@ -191,7 +171,7 @@ download_eoi_data <- function(processed_eoi_data, save_path, uos = NULL) {
     processed_eoi_data <- processed_eoi_data[valid_uos_to_keep]
 
     # Log outcomes
-    kept_names <- names(processed_eoi_data) # Should be same as valid_uos_to_keep
+    kept_names <- names(processed_eoi_data)
 
     if (length(kept_names) > 0) {
       logger::log_debug(sprintf(
@@ -219,11 +199,11 @@ download_eoi_data <- function(processed_eoi_data, save_path, uos = NULL) {
   }
 
   if (length(processed_eoi_data) > 0) {
-    logger::log_info(sprintf("Starting to save %d data frame(s) to disk in %s.", length(processed_eoi_data), save_path))
+    logger::log_info(sprintf("Starting to process %d data frame(s) for in-memory representation.", length(processed_eoi_data)))
 
     for (unit_name in names(processed_eoi_data)) {
       df_to_save <- processed_eoi_data[[unit_name]]
-      logger::log_debug(sprintf("Processing unit for saving: '%s'", unit_name))
+      logger::log_debug(sprintf("Processing unit for in-memory representation: '%s'", unit_name))
 
       sanitized_unit_name <- gsub("[^A-Za-z0-9_.-]+", "_", unit_name)
       sanitized_unit_name <- gsub("^_+|_+$", "", sanitized_unit_name)
@@ -234,48 +214,33 @@ download_eoi_data <- function(processed_eoi_data, save_path, uos = NULL) {
         sanitized_unit_name <- "unnamed_unit"
       }
 
-      unit_specific_dir <- file.path(save_path, sanitized_unit_name)
-
-      if (!dir.exists(unit_specific_dir)) {
-        logger::log_info(sprintf("Unit specific directory does not exist. Creating: %s", unit_specific_dir))
-        tryCatch(
-          {
-            dir.create(unit_specific_dir, recursive = TRUE, showWarnings = FALSE)
-            logger::log_info(sprintf("Created subdirectory: %s", unit_specific_dir))
-          },
-          error = function(e) {
-            logger::log_error(sprintf("Failed to create unit specific directory %s: %s", unit_specific_dir, e$message))
-            # Decide if we should stop or just warn and continue for other units
-            warning(sprintf("Failed to create directory for unit %s (%s). Skipping saving for this unit. Error: %s", unit_name, unit_specific_dir, e$message))
-            next # Skip to the next unit in the loop
-          }
-        )
-      }
-
-      csv_file_path <- file.path(unit_specific_dir, paste0(sanitized_unit_name, "_data.csv"))
-      logger::log_debug(sprintf("Target CSV file path: %s", csv_file_path))
-
       if (nrow(df_to_save) > 0) {
+        # Construct the relative path for the zip archive
+        relative_file_path <- paste(sanitized_unit_name, paste0(sanitized_unit_name, "_data.csv"), sep = "/")
+        logger::log_debug(sprintf("Intended relative path in archive: %s", relative_file_path))
+
         tryCatch(
           {
-            readr::write_csv(df_to_save, csv_file_path)
-            logger::log_info(sprintf("Saved %d rows for unit '%s' to: %s", nrow(df_to_save), unit_name, csv_file_path))
+            csv_content <- readr::format_csv(df_to_save)
+            output_files[[length(output_files) + 1]] <- list(path = relative_file_path, content = csv_content)
+            logger::log_info(sprintf("Generated CSV content for unit '%s' (%d rows) for path: %s", unit_name, nrow(df_to_save), relative_file_path))
           },
           error = function(e) {
-            logger::log_error(sprintf("Failed to write CSV for unit %s to %s: %s", unit_name, csv_file_path, e$message))
-            warning(sprintf("Failed to write CSV for unit %s to %s. Error: %s", unit_name, csv_file_path, e$message))
+            logger::log_error(sprintf("Failed to generate CSV content for unit %s for path %s: %s", unit_name, relative_file_path, e$message))
+            warning(sprintf("Failed to generate CSV content for unit %s for path %s. Error: %s", unit_name, relative_file_path, e$message))
+            # Continue to next unit if an error occurs for the current one
           }
         )
       } else {
-        logger::log_info(sprintf("No data to save for unit '%s' (as '%s') - data frame is empty. Skipping file creation at %s.", unit_name, sanitized_unit_name, csv_file_path))
+        logger::log_info(sprintf("No data to process for unit '%s' (as '%s') - data frame is empty. Skipping content generation.", unit_name, sanitized_unit_name))
       }
     }
-    logger::log_info("All data frames have been processed for saving.")
+    logger::log_info("All data frames have been processed for in-memory representation.")
   } else {
-    logger::log_warn("The 'processed_eoi_data' input to download_eoi_data is empty. No files will be saved.")
+    logger::log_warn("The 'processed_eoi_data' input is empty. No file contents will be generated.")
   }
-  logger::log_debug("Exiting download_eoi_data function.")
-  return(invisible(NULL))
+  logger::log_debug("Exiting prepare_eoi function.")
+  return(output_files)
 }
 
 #' Process EOI Data by Preferred Units
@@ -290,7 +255,7 @@ download_eoi_data <- function(processed_eoi_data, save_path, uos = NULL) {
 #'   Typically generated by \code{\link{eoi_extract}}.
 #' @return A named list of data frames, where each element is named
 #'   after a unit code and contains the filtered EOI data for that unit.
-#'   The list can be passed to \code{\link{download_eoi_data}} for saving.
+#'   The list can be passed to \code{\link{prepare_eoi}} for archiving.
 #' @importFrom logger log_info log_debug log_warn log_error
 #' @export
 #' @examples
@@ -308,7 +273,7 @@ download_eoi_data <- function(processed_eoi_data, save_path, uos = NULL) {
 #' #
 #' # # Optionally, save the processed data
 #' # # temp_output_dir <- tempfile("eoi_output_")
-#' # # download_eoi_data(processed_data, temp_output_dir)
+#' # # prepare_eoi(processed_data) # Renamed from download_eoi_data
 #' # # list.files(temp_output_dir, recursive = TRUE)
 #' # # unlink(temp_output_dir, recursive = TRUE) # Clean up
 #' }
