@@ -10,8 +10,7 @@ Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.2
 Suggests: 
     testthat (>= 3.0.0),
-    mockery,
-    logger
+    mockery
 Config/testthat/edition: 3
 Imports:
     readr,
@@ -24,4 +23,11 @@ Imports:
     huxtable,
     rvest,
     shiny,
-    DT
+    DT,
+    bslib,
+    zip,
+    htmltools,
+    bsicons,
+    logger,
+    rlang,
+    tibble
