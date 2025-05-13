@@ -92,60 +92,38 @@ ui <- bslib::page_fillable(
     ),
     # Main content area
     # Main content area: Replaced with a flex container for vertical distribution
-    shiny::div(
-      style = "display: flex; flex-direction: column; height: 100%; gap: 1rem; padding: 1rem;",
-
-      # Top Section: Summary (approx. 30% height)
-      bslib::card(
-        style = "flex: 0.3; overflow-y: auto;",
-        bslib::card_header("Summary"),
-        bslib::card_body(
-          shiny::p("Summary statistics for the selected unit:"),
-          shiny::uiOutput("summary_output_markdown")
+    bslib::navset_bar(
+      bslib::nav_panel(
+        title = "Parse",
+        shiny::h4("Summary"),
+        shiny::uiOutput("summary_output_markdown"),
+        shiny::hr(),
+        shiny::h4("Console Output"),
+        shiny::div(
+          style = "flex-grow: 1; overflow-y: auto; min-height: 0; max-height: 45vh;", # Control height for console output
+          shiny::verbatimTextOutput("parsed_eoi_data")
         )
       ),
-
-      # Bottom Section: Tabs (approx. 70% height)
-      bslib::card(
-        fillable = TRUE,
-        style = "flex: 0.7; display: flex; flex-direction: column;",
-        bslib::card_body(
-          fillable = TRUE,
-          padding = 0, # Remove padding if navset_tab handles it or if desired
-          bslib::navset_tab(
-            id = "parsed_data_tabs", # New ID for the navset_tab
-            bslib::nav_panel(
-              title = "Console output",
-              # Content from original "Console output" tab
-              shiny::p("Raw results will be displayed here."), # This line was outside the scrollable div in original, kept for consistency
-              shiny::div( # Flex container for the entire tab panel content
-                style = "display: flex; flex-direction: column; height: 100%;", # Fill height, column layout
-                shiny::div( # Flex item (grows and scrolls)
-                  style = "flex-grow: 1; overflow-y: auto; min-height: 0;", # Grow to fill, scroll if needed
-                  shiny::verbatimTextOutput("parsed_eoi_data")
-                )
-              )
-            ),
-            bslib::nav_panel(
-              title = "Profiles",
-              # Content from original "Profiles" tab
-              shiny::div( # Flex container for the entire tab panel content
-                style = "display: flex; flex-direction: column; height: 100%;", # Fill height, column layout
-                shiny::selectizeInput("filter_name_input", # Flex item 1 (fixed size)
-                  "Filter by Name:",
-                  choices = c("Select a name" = ""), # Initial empty choice
-                  selected = "", # Default to empty
-                  width = "100%",
-                  options = list(dropdownParent = "body") # Ensure dropdown is visible
-                ),
-                shiny::div( # Flex item 2 (grows and scrolls)
-                  style = "flex-grow: 1; overflow-y: auto; min-height: 0;", # Grow to fill, scroll if needed
-                  shiny::htmlOutput("profile_display_html")
-                )
-              )
-            )
+      bslib::nav_panel(
+        title = "Profile",
+        shiny::div( # Retaining flex container for layout consistency
+          style = "display: flex; flex-direction: column; height: 100%;",
+          shiny::selectizeInput("filter_name_input",
+            "Filter by Name:",
+            choices = c("Select a name" = ""),
+            selected = "",
+            width = "100%",
+            options = list(dropdownParent = "body")
+          ),
+          shiny::div(
+            style = "flex-grow: 1; overflow-y: auto; min-height: 0;", # Scrollable area for profile display
+            shiny::htmlOutput("profile_display_html")
           )
         )
+      ),
+      bslib::nav_panel(
+        title = "Table",
+        shiny::p("Table content will be displayed here.")
       )
     )
   )
