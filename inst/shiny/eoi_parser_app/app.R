@@ -15,9 +15,6 @@ ui <- bslib::page_fillable(
   title = "EOI Parser",
   theme = bslib::bs_theme(version = 5),
   shiny::tags$head(
-    shiny::tags$style(shiny::HTML(
-      ""
-    )),
     shiny::tags$style(shiny::HTML("
       .small-box .inner > h3, .small-box .inner > p {
         text-align: center;
@@ -39,98 +36,99 @@ ui <- bslib::page_fillable(
       }
     "))
   ),
-  bslib::layout_columns(
-    col_widths = c(4, 6, 2), # 30%, 50%, 20% of 12 columns
-    shiny::fileInput("eoi_file",
-      "Select CSV file",
-      multiple = FALSE,
-      width = "100%",
-      accept = c(
-        ".csv", "text/csv",
-        "text/comma-separated-values,text/plain"
+  bslib::layout_sidebar(
+    sidebar = bslib::sidebar(
+      title = "Controls & Summary",
+      shiny::fileInput("eoi_file",
+        "Select CSV file",
+        multiple = FALSE,
+        width = "100%",
+        accept = c(
+          ".csv", "text/csv",
+          "text/comma-separated-values,text/plain"
+        )
+      ),
+      shiny::selectInput("unit_filter",
+        "Filter by Unit:",
+        choices = "ALL", # Initial choice
+        selected = "ALL",
+        width = "100%"
+      ),
+      shiny::hr(),
+      shiny::div(
+        style = "text-align: center;",
+        shiny::h5("Statistics")
+      ),
+      shiny::div(
+        style = "text-align: center; padding: 2px; display: flex; flex-direction: column; justify-content: center; align-items: center; margin-bottom: 10px;",
+        bsicons::bs_icon("people-fill", size = "1.5em"),
+        shiny::textOutput("total_applications_output"),
+        shiny::p("Total applications", style = "font-size: 0.8em; margin-bottom: 0; margin-top: 0.2em; line-height: 1.2;")
+      ),
+      shiny::div(
+        style = "text-align: center; padding: 2px; display: flex; flex-direction: column; justify-content: center; align-items: center; margin-bottom: 10px;",
+        bsicons::bs_icon("card-list", size = "1.5em"),
+        shiny::textOutput("unique_units_output"),
+        shiny::p("Total units in list", style = "font-size: 0.8em; margin-bottom: 0; margin-top: 0.2em; line-height: 1.2;")
+      ),
+      shiny::div(
+        style = "text-align: center; padding: 2px; display: flex; flex-direction: column; justify-content: center; align-items: center; margin-bottom: 10px;",
+        bsicons::bs_icon("person-badge", size = "1.5em"),
+        shiny::textOutput("no_soles_experience_output"),
+        shiny::p("Returning staff", style = "font-size: 0.8em; margin-bottom: 0; margin-top: 0.2em; line-height: 1.2;")
+      ),
+      shiny::div(
+        style = "text-align: center; padding: 2px; display: flex; flex-direction: column; justify-content: center; align-items: center; margin-bottom: 10px;",
+        bsicons::bs_icon("mortarboard-fill", size = "1.5em"),
+        shiny::textOutput("phd_applicants_output"),
+        shiny::p("PhD holders", style = "font-size: 0.8em; margin-bottom: 0; margin-top: 0.2em; line-height: 1.2;")
+      ),
+      shiny::div(
+        style = "text-align: center; padding: 2px; display: flex; flex-direction: column; justify-content: center; align-items: center;", # No margin-bottom for the last item
+        bsicons::bs_icon("person-check-fill", size = "1.5em"),
+        shiny::textOutput("completed_training_output"),
+        shiny::p("Completed training", style = "font-size: 0.8em; margin-bottom: 0; margin-top: 0.2em; line-height: 1.2;")
       )
     ),
-    shiny::selectInput("unit_filter",
-      "Filter by Unit:",
-      choices = "ALL", # Initial choice
-      selected = "ALL",
-      width = "100%" # Will fill its allocated column space
-    )
-  ),
-  bslib::layout_columns(
-    col_widths = 12,
+    # Main content area
     bslib::card(
-      style = "min-height: 200px;", # Set a minimum height for the card
-      bslib::card_header("Summary"),
+      fillable = TRUE, # Allow card content (card_body) to fill the card
+      bslib::card_header("Parsed output"),
       bslib::card_body(
-        bslib::layout_columns(
-          col_widths = bslib::breakpoints(sm = 12, md = 6, lg = 2), # Responsive widths for value boxes
-          bslib::value_box(
-            title = "Total applications",
-            value = shiny::textOutput("total_applications_output"),
-            showcase = bsicons::bs_icon("people-fill")
-          ),
-          bslib::value_box(
-            title = "Total units in list",
-            value = shiny::textOutput("unique_units_output"),
-            showcase = bsicons::bs_icon("card-list")
-          ),
-          bslib::value_box(
-            title = "Returning staff",
-            value = shiny::textOutput("no_soles_experience_output"),
-            showcase = bsicons::bs_icon("person-badge")
-          ),
-          bslib::value_box(
-            title = "PhD holders",
-            value = shiny::textOutput("phd_applicants_output"),
-            showcase = bsicons::bs_icon("mortarboard-fill")
-          ),
-          bslib::value_box(
-            title = "Completed training",
-            value = shiny::textOutput("completed_training_output"),
-            showcase = bsicons::bs_icon("person-check-fill") # New icon
-          )
-        )
-      )
-    )
-  ),
-  bslib::card(
-    height = "600px", # Set a fixed height for the card
-    bslib::card_header("Parsed output"),
-    bslib::card_body(
-      # scrollable = TRUE, # Removed as per prompt's guidance to apply to tab content
-      bslib::navset_card_tab(
-        id = "parsed_data_tabs",
-        bslib::nav_panel(
-          title = "Console output",
-          shiny::p("Raw results will be displayed here."),
-          shiny::div( # Flex container for the entire tab panel content
-            style = "display: flex; flex-direction: column; height: 100%;", # Fill height, column layout
-            shiny::div( # Flex item (grows and scrolls)
-              style = "flex-grow: 1; overflow-y: auto; min-height: 0;", # Grow to fill, scroll if needed
-              shiny::verbatimTextOutput("parsed_eoi_data")
+        fillable = TRUE, # Allow card_body content (navset_tab) to fill card_body
+        bslib::navset_card_tab(
+          id = "parsed_data_tabs",
+          bslib::nav_panel(
+            title = "Console output",
+            shiny::p("Raw results will be displayed here."),
+            shiny::div( # Flex container for the entire tab panel content
+              style = "display: flex; flex-direction: column; height: 100%;", # Fill height, column layout
+              shiny::div( # Flex item (grows and scrolls)
+                style = "flex-grow: 1; overflow-y: auto; min-height: 0;", # Grow to fill, scroll if needed
+                shiny::verbatimTextOutput("parsed_eoi_data")
+              )
             )
-          )
-        ),
-        bslib::nav_panel(
-          title = "Summary",
-          shiny::p("Summary statistics for the selected unit:"),
-          shiny::uiOutput("summary_output_markdown")
-        ),
-        bslib::nav_panel(
-          title = "Profiles",
-          shiny::div( # Flex container for the entire tab panel content
-            style = "display: flex; flex-direction: column; height: 100%;", # Fill height, column layout
-            shiny::selectizeInput("filter_name_input", # Flex item 1 (fixed size)
-              "Filter by Name:",
-              choices = c("Select a name" = ""), # Initial empty choice
-              selected = "", # Default to empty
-              width = "100%",
-              options = list(dropdownParent = "body")
-            ),
-            shiny::div( # Flex item 2 (grows and scrolls)
-              style = "flex-grow: 1; overflow-y: auto; min-height: 0;", # Grow to fill, scroll if needed
-              shiny::htmlOutput("profile_display_html")
+          ),
+          bslib::nav_panel(
+            title = "Summary",
+            shiny::p("Summary statistics for the selected unit:"),
+            shiny::uiOutput("summary_output_markdown")
+          ),
+          bslib::nav_panel(
+            title = "Profiles",
+            shiny::div( # Flex container for the entire tab panel content
+              style = "display: flex; flex-direction: column; height: 100%;", # Fill height, column layout
+              shiny::selectizeInput("filter_name_input", # Flex item 1 (fixed size)
+                "Filter by Name:",
+                choices = c("Select a name" = ""), # Initial empty choice
+                selected = "", # Default to empty
+                width = "100%",
+                options = list(dropdownParent = "body")
+              ),
+              shiny::div( # Flex item 2 (grows and scrolls)
+                style = "flex-grow: 1; overflow-y: auto; min-height: 0;", # Grow to fill, scroll if needed
+                shiny::htmlOutput("profile_display_html")
+              )
             )
           )
         )
