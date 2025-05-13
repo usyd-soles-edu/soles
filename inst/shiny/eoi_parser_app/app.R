@@ -4,6 +4,9 @@ library(bslib)
 library(soles) # Added for eoi_extract and other soles functions
 library(dplyr) # For mutate and filter operations
 library(zip) # For zipping files
+library(stringr) # For str_detect
+library(tidyr) # For replace_na
+library(htmltools) # For htmlEscape
 # Ensure soles is available, though not explicitly loaded via library() here
 # as functions are called with soles::
 
@@ -34,10 +37,6 @@ ui <- bslib::page_fillable(
         display: inline-block; /* Allows text-align to work as expected */
         width: 100%;
       }
-      /* Align download button vertically with inputs that have labels */
-      .align-download-button {
-        margin-top: 1.85em;
-      }
     "))
   ),
   bslib::layout_columns(
@@ -56,9 +55,7 @@ ui <- bslib::page_fillable(
       choices = "ALL", # Initial choice
       selected = "ALL",
       width = "100%" # Will fill its allocated column space
-    ),
-    # Add class for vertical alignment via CSS
-    shiny::downloadButton("download_data_button", "Download", width = "100%", class = "align-download-button")
+    )
   ),
   bslib::layout_columns(
     col_widths = 12,
@@ -116,8 +113,9 @@ ui <- bslib::page_fillable(
           )
         ),
         bslib::nav_panel(
-          title = "Table",
-          shiny::p("Tables will be displayed here.")
+          title = "Summary",
+          shiny::p("Summary statistics for the selected unit:"),
+          shiny::uiOutput("summary_output_markdown")
         ),
         bslib::nav_panel(
           title = "Profiles",
@@ -148,6 +146,30 @@ server <- function(input, output, session) {
   parsed_data_reactive <- shiny::reactiveVal(NULL)
   extracted_data_reactive <- shiny::reactiveVal(NULL)
   processed_data_reactive <- shiny::reactiveVal(NULL)
+
+  # Reactive expression for data filtered by the selected unit
+  filtered_data_reactive <- shiny::reactive({
+    data <- parsed_data_reactive()
+    unit <- input$unit_filter
+    shiny::req(data, unit) # Require data and filter selection
+
+    # Return NULL if no specific unit is selected, as the summary is per-unit
+    if (unit == "ALL") {
+      return(NULL)
+    }
+
+    # Ensure preferred_units exists
+    if (!"preferred_units" %in% names(data)) {
+      shiny::showNotification("Column 'preferred_units' not found in parsed data. Cannot filter for unit summary.", type = "warning")
+      return(NULL)
+    }
+
+    # Filter based on preferred_units containing the selected unit
+    # Handle potential NAs in preferred_units before filtering
+    data |>
+      dplyr::mutate(preferred_units = tidyr::replace_na(preferred_units, "")) |>
+      dplyr::filter(stringr::str_detect(preferred_units, fixed(unit)))
+  })
 
   shiny::observeEvent(input$eoi_file, {
     shiny::req(input$eoi_file)
@@ -406,75 +428,38 @@ server <- function(input, output, session) {
       return(shiny::HTML("<p><em>Profile content is not in a displayable text format.</em></p>")) # Using HTML entities
     }
   })
-  # Download handler for processed EOI data
-  output$download_data_button <- shiny::downloadHandler(
-    filename = function() {
-      paste0(format(Sys.Date(), "%Y%m%d"), "-eoi_teaching_export.zip")
-    },
-    content = function(file) {
-      # Ensure data is available
-      shiny::req(processed_data_reactive())
-      data_to_download <- processed_data_reactive()
 
-      # Check for errors in processed data (similar to renderPrint logic)
-      if (!is.null(data_to_download$error)) {
-        shiny::showNotification(paste("Error in processed data:", data_to_download$error), type = "error")
-        return(NULL) # Stop download if there's an error
-      }
-      if (is.null(data_to_download)) {
-        shiny::showNotification("No data available to download.", type = "warning")
-        return(NULL)
-      }
+  # Dynamic Markdown summary output based on selected unit
+  output$summary_output_markdown <- shiny::renderUI({
+    unit_name <- input$unit_filter
+    shiny::req(unit_name) # Require unit selection
 
-      # Create a temporary directory for the output files
-      temp_subdir_name <- paste0(format(Sys.Date(), "%Y%m%d"), "-eoi-teaching-export")
-      # tempdir() provides a session-specific temporary directory path
-      temp_output_path <- file.path(tempdir(), temp_subdir_name)
-
-      # Clean up if the directory somehow exists from a previous failed attempt (unlikely with unique tempdir() subpaths but safe)
-      if (dir.exists(temp_output_path)) {
-        unlink(temp_output_path, recursive = TRUE, force = TRUE)
-      }
-      dir.create(temp_output_path, showWarnings = FALSE, recursive = TRUE)
-
-      # Ensure cleanup of the temporary directory on exit or error from this function
-      on.exit(unlink(temp_output_path, recursive = TRUE, force = TRUE), add = TRUE)
-
-      tryCatch(
-        {
-          # Call soles::download_eoi_data based on unit filter
-          if (input$unit_filter == "ALL") {
-            soles::download_eoi_data(data_list = data_to_download, output_dir = temp_output_path)
-          } else {
-            soles::download_eoi_data(data_list = data_to_download, output_dir = temp_output_path, uos = input$unit_filter)
-          }
-
-          # List files in the temporary output directory (these are generated by download_eoi_data)
-          files_to_zip <- list.files(temp_output_path, full.names = TRUE, recursive = TRUE)
-
-          if (length(files_to_zip) == 0) {
-            shiny::showNotification("No files were generated by download_eoi_data for the selected criteria.", type = "warning")
-            # If shiny created a placeholder for `file`, remove it as there's nothing to zip.
-            if (file.exists(file)) unlink(file)
-            return(NULL)
-          }
-
-          # Create the zip file.
-          # `file` is the path provided by Shiny for the final downloadable file.
-          # `root = temp_output_path` ensures paths inside zip are relative to temp_output_path.
-          zip::zipr(zipfile = file, files = files_to_zip, root = temp_output_path)
-        },
-        error = function(e) {
-          shiny::showNotification(paste("Error during data download and zipping:", e$message), type = "error")
-          # Ensure no partial/empty file is served if zipping or download_eoi_data fails
-          if (file.exists(file)) {
-            unlink(file)
-          }
-          return(NULL)
-        }
-      )
+    if (unit_name == "ALL") {
+      # Using shiny::HTML to ensure <p> is rendered correctly.
+      return(shiny::HTML("<p>Select a unit to view its summary.</p>"))
     }
-  ) # End of downloadHandler
+
+    elist_data <- processed_data_reactive()
+    shiny::req(elist_data) # Require elist_data to be available
+
+    # Handle cases where elist_data might be an error message from processing
+    if (is.list(elist_data) && !is.null(elist_data$error)) {
+      error_message <- htmltools::htmlEscape(elist_data$error)
+      return(shiny::HTML(paste0("<p>Cannot generate summary: ", error_message, "</p>")))
+    }
+
+    # Handle cases where elist_data is NULL or not a list (e.g., before file processing or unexpected structure)
+    if (is.null(elist_data) || !is.list(elist_data)) {
+      return(shiny::HTML("<p>No data processed yet, or data is not in the expected list format for summary generation.</p>"))
+    }
+
+    # Call the generate_unit_summary function from the soles package
+    # This function is expected to return a Markdown formatted string.
+    summary_md <- soles::generate_unit_summary(elist = elist_data, unit_name = unit_name)
+
+    # Render the Markdown string to HTML
+    shiny::markdown(summary_md)
+  })
 }
 
 # Create and return the Shiny app object
