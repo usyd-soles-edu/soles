@@ -7,6 +7,7 @@ library(zip) # For zipping files
 library(stringr) # For str_detect
 library(tidyr) # For replace_na
 library(htmltools) # For htmlEscape
+library(DT) # For interactive tables
 # Ensure soles is available, though not explicitly loaded via library() here
 # as functions are called with soles::
 
@@ -123,7 +124,7 @@ ui <- bslib::page_fillable(
       ),
       bslib::nav_panel(
         title = "Table",
-        shiny::p("Table content will be displayed here.")
+        DT::DTOutput("dynamic_table_output")
       )
     )
   )
@@ -450,6 +451,101 @@ server <- function(input, output, session) {
     # Render the Markdown string to HTML
     shiny::markdown(summary_md)
   })
+  # Server logic for the dynamic DT table
+  output$dynamic_table_output <- DT::renderDataTable({
+    shiny::req(processed_data_reactive(), input$unit_filter)
+
+    data_for_table <- processed_data_reactive()
+
+    # Handle potential errors in data_for_table
+    if (!is.null(data_for_table$error)) {
+      return(DT::datatable(data.frame(Message = as.character(data_for_table$error)),
+        options = list(searching = FALSE, lengthChange = FALSE, info = FALSE, paging = FALSE), rownames = FALSE
+      ))
+    }
+
+    # If data_for_table is NULL (e.g., before a file is loaded)
+    if (is.null(data_for_table)) {
+      return(DT::datatable(data.frame(Message = "No data to display. Please upload and process a file."),
+        options = list(searching = FALSE, lengthChange = FALSE, info = FALSE, paging = FALSE), rownames = FALSE
+      ))
+    }
+
+    final_df_for_table <- NULL # Initialize
+
+    if (input$unit_filter == "ALL") {
+      if (is.list(data_for_table) && !is.data.frame(data_for_table)) { # It's a list, hopefully of data.frames
+        # Filter out non-data.frame elements and NULLs before binding
+        valid_dfs <- Filter(function(x) is.data.frame(x) && nrow(x) > 0, data_for_table)
+        if (length(valid_dfs) > 0) {
+          final_df_for_table <- tryCatch(
+            {
+              dplyr::bind_rows(valid_dfs, .id = "source_unit")
+            },
+            error = function(e) {
+              data.frame(Message = paste("Error combining data for 'ALL':", e$message))
+            }
+          )
+        } else {
+          final_df_for_table <- data.frame(Message = "No valid data frames found to combine for 'ALL' units.")
+        }
+      } else if (is.data.frame(data_for_table)) { # It's already a single data frame
+        final_df_for_table <- data_for_table
+      } else {
+        final_df_for_table <- data.frame(Message = "Data for 'ALL' units is not in a recognized list or data.frame format.")
+      }
+    } else { # Specific unit selected
+      if (is.list(data_for_table) && input$unit_filter %in% names(data_for_table)) {
+        unit_data <- data_for_table[[input$unit_filter]]
+        if (is.data.frame(unit_data)) {
+          final_df_for_table <- unit_data
+        } else if (is.null(unit_data)) {
+          final_df_for_table <- data.frame(Message = paste("No data available for unit:", input$unit_filter, "(data is NULL)."))
+        } else {
+          final_df_for_table <- data.frame(Message = paste("Data for unit:", input$unit_filter, "is not a data frame. Type:", class(unit_data)[1]))
+        }
+      } else {
+        final_df_for_table <- data.frame(Message = paste("No data available for unit:", input$unit_filter, "or data structure is unexpected."))
+      }
+    }
+
+    # Final checks for rendering messages or actual data
+    if (is.null(final_df_for_table)) {
+      return(DT::datatable(data.frame(Message = "An unexpected state occurred: final data is NULL."),
+        options = list(searching = FALSE, lengthChange = FALSE, info = FALSE, paging = FALSE), rownames = FALSE
+      ))
+    }
+
+    # If final_df_for_table is a data.frame containing a 'Message' column (from error/info handling)
+    if (is.data.frame(final_df_for_table) && "Message" %in% names(final_df_for_table) && ncol(final_df_for_table) == 1) {
+      return(DT::datatable(final_df_for_table,
+        options = list(searching = FALSE, lengthChange = FALSE, info = FALSE, paging = FALSE), rownames = FALSE
+      ))
+    }
+
+    # If it's a data.frame but has 0 rows (and not a message frame)
+    if (is.data.frame(final_df_for_table) && nrow(final_df_for_table) == 0) {
+      return(DT::datatable(data.frame(Message = "No data to display for the current selection."),
+        options = list(searching = FALSE, lengthChange = FALSE, info = FALSE, paging = FALSE), rownames = FALSE
+      ))
+    }
+
+    # If it's not a data.frame at all (should be caught by earlier logic setting it to a message data.frame)
+    if (!is.data.frame(final_df_for_table)) {
+      return(DT::datatable(data.frame(Message = "Data is not in a displayable table format."),
+        options = list(searching = FALSE, lengthChange = FALSE, info = FALSE, paging = FALSE), rownames = FALSE
+      ))
+    }
+
+    # If we reach here, final_df_for_table is a non-empty data.frame with actual data
+    DT::datatable(final_df_for_table,
+      options = list(scrollX = TRUE, pageLength = 10, autoWidth = TRUE), # As per user request
+      rownames = FALSE,
+      filter = "top",
+      class = "display nowrap compact table table-striped table-hover", # Added for styling
+      escape = FALSE # Set to FALSE, assuming data doesn't contain malicious HTML or HTML is intended
+    )
+  }) # End of renderDataTable
 }
 
 # Create and return the Shiny app object
