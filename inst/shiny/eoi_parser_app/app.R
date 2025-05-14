@@ -39,7 +39,7 @@ ui <- bslib::page_fillable(
   ),
   bslib::layout_sidebar(
     sidebar = bslib::sidebar(
-      title = "Controls & Summary",
+      title = "Controls",
       shiny::fileInput("eoi_file",
         "Select CSV file",
         multiple = FALSE,
@@ -55,7 +55,7 @@ ui <- bslib::page_fillable(
         selected = "ALL",
         width = "100%"
       ),
-      shiny::downloadButton("downloadProcessedDataBtn", "Download Processed EOI Data", class = "btn-primary", style = "width: 100%; margin-top: 10px; margin-bottom: 10px;"), # Added download button
+      shiny::downloadButton("downloadProcessedDataBtn", "Download processed data", class = "btn-primary", style = "width: 100%; margin-top: 10px; margin-bottom: 10px;"), # Added download button
       shiny::hr(),
       shiny::div(
         style = "text-align: center;",

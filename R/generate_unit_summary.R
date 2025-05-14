@@ -70,21 +70,50 @@ generate_unit_summary <- function(elist, unit_name) {
     }
   }
 
-  # Construct the summary string
+  # Helper function for formatting counts with correct grammar
+  # This function is defined within generate_unit_summary for local use.
+  format_count_phrase <- function(count, singular_noun, plural_noun, zero_prefix = "no") {
+    if (count == 0) {
+      return(paste(zero_prefix, plural_noun))
+    } else if (count == 1) {
+      return(paste("1", singular_noun))
+    } else {
+      return(paste(count, plural_noun))
+    }
+  }
+
+  # Construct the concise summary string
   heading_line <- sprintf("### %s", unit_name)
 
-  sentence1 <- sprintf("There were a total of %d applicants for this unit.", applicants)
+  # 1. Applicants phrase
+  applicants_phrase <- format_count_phrase(applicants, "applicant", "applicants")
+  applicants_sentence <- paste0(toupper(substr(applicants_phrase, 1, 1)), substr(applicants_phrase, 2, nchar(applicants_phrase)), ".")
 
-  phd_percentage_text <- if (applicants > 0) {
-    sprintf("(~%.0f%%)", (total_phd_conferred / applicants * 100))
+  # 2. PhD holders phrase
+  phd_holders_phrase <- format_count_phrase(total_phd_conferred, "PhD holder", "PhD holders")
+
+  phd_percentage_string <- ""
+  if (applicants > 0) {
+    phd_percentage_string <- sprintf(" (~%.0f%% of applicants)", (total_phd_conferred / applicants * 100))
   } else {
-    "(N/A%)"
+    phd_percentage_string <- " (PhD % N/A)"
   }
-  sentence2 <- sprintf("Of these, %d applicants %s hold a PhD.", total_phd_conferred, phd_percentage_text)
+  phd_sentence <- paste0(toupper(substr(phd_holders_phrase, 1, 1)), substr(phd_holders_phrase, 2, nchar(phd_holders_phrase)), phd_percentage_string, ".")
 
-  sentence3 <- sprintf("Among the applicants, %d have previously taught this unit (based on past teaching.", returning_educators)
+  # 3. Returning educators phrase
+  returning_educators_sentence <- ""
+  if (returning_educators == 0) {
+    no_returning_educators_phrase <- format_count_phrase(0, "returning educator", "returning educators")
+    returning_educators_sentence <- paste0(toupper(substr(no_returning_educators_phrase, 1, 1)), substr(no_returning_educators_phrase, 2, nchar(no_returning_educators_phrase)), ".")
+  } else {
+    returning_educators_base_phrase <- format_count_phrase(returning_educators, "returning educator", "returning educators")
+    returning_educators_sentence <- paste0(toupper(substr(returning_educators_base_phrase, 1, 1)), substr(returning_educators_base_phrase, 2, nchar(returning_educators_base_phrase)), " had taught this unit previously.")
+  }
 
-  full_summary <- paste(heading_line, sentence1, sentence2, sentence3, sep = "\n")
+  # Combine all parts into a paragraph
+  summary_paragraph <- paste(applicants_sentence, phd_sentence, returning_educators_sentence, sep = " ")
+
+  full_summary <- paste(heading_line, summary_paragraph, sep = "\n")
 
   return(full_summary)
 }
