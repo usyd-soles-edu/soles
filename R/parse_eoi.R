@@ -447,6 +447,24 @@ create_eoi_profile <- function(applicant_data) {
     )
   }
 
+  # Process preferred_units for display
+  preferred_units_raw_val <- .get_val_or_default(ad$preferred_units)
+  if (identical(preferred_units_raw_val, "N/A") || identical(preferred_units_raw_val, "")) {
+    preferred_units_display <- "N/A"
+  } else {
+    units_vec <- trimws(strsplit(preferred_units_raw_val, ",")[[1]])
+    units_vec <- units_vec[units_vec != ""] # Remove empty strings after split
+
+    if (length(units_vec) == 0) {
+      preferred_units_display <- "N/A"
+    } else {
+      # Each unit starts with a newline, then indentation and bullet
+      formatted_units <- paste0("\n  - ", units_vec)
+      # Collapse them into a single string
+      preferred_units_display <- paste(formatted_units, collapse = "")
+    }
+  }
+
   profile_string <- sprintf(
     "Name: %s %s (Title: %s)\nStaff ID: %s\nPreferred Contact: %s, %s\n\nPhD Conferred: %s\nPreviously Demonstrated: %s\nPrevious Units Taught: %s\nPreferred Units to Teach: %s\nDesired Hours per Week: %s\n\nAvailability:\n  Monday: %s\n  Tuesday: %s\n  Wednesday: %s\n  Thursday: %s\n  Friday: %s\nBlockout Dates: %s\n\nCompleted Demonstrator Training: %s\nInterested in Lead Demonstrator Role: %s\n%sExpertise Area:\n%s\n\nHigher Education Degrees:\n%s\n\nTeaching Philosophy:\n%s\n\nHow My Experience Will Benefit Student Learning:\n%s",
     .get_val_or_default(ad$given_name),
@@ -458,7 +476,7 @@ create_eoi_profile <- function(applicant_data) {
     .get_val_or_default(ad$phd_conferred),
     .get_val_or_default(ad$previous_demonstrator),
     previous_units_display,
-    .get_val_or_default(ad$preferred_units),
+    preferred_units_display,
     .get_val_or_default(ad$desired_hours_per_week),
     .get_val_or_default(ad$availability_monday),
     .get_val_or_default(ad$availability_tuesday),
