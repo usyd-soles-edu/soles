@@ -10,15 +10,12 @@ parse_eoi(path)
 \item{path}{Character string; the file path to the EOI CSV file.}
 }
 \value{
-A tibble containing the parsed and cleaned EOI data, with
-selected columns renamed for clarity.
+A tibble containing the parsed and cleaned EOI data.
 }
 \description{
-Reads an EOI CSV file, extracts relevant columns, and renames them
-according to a predefined schema. The function expects a specific CSV
-structure where actual headers are on the second row and data starts
-from the fourth row. The first 17 columns (based on the headers from
-the second row) are discarded.
+Reads an EOI CSV file, then uses a flexible renaming function to process columns.
+The function expects a specific CSV structure where actual headers are on the
+second row and data starts from the fourth row.
 }
 \examples{
 \dontrun{

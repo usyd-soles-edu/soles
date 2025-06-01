@@ -1,16 +1,131 @@
+# Alternative approach with more flexible keyword matching
+rename_soles_columns_flexible <- function(data) {
+  # Define mapping with more specific patterns to avoid conflicts
+  column_mapping <- list(
+    "worked_at_usyd" = c("worked.*university.*sydney.*previously"),
+    "staff_id" = c("staff.*id.*number.*7.*digits"),
+    "title" = c("^what.*title"),
+    "surname" = c("surname.*family.*name"),
+    "given_name" = c("given.*name"),
+    "preferred_email" = c("preferred.*email.*address"),
+    "preferred_contact" = c("preferred.*contact.*number"),
+    "suburb_postcode" = c("suburb.*post.*code"),
+    "valid_visa" = c("valid.*working.*visa.*australia"),
+    "phd_conferred" = c("phd.*conferred"),
+    "previous_demonstrator" = c("demonstrator.*with.*soles.*before"),
+    "previous_units" = c("previous.*units.*taught.*year"),
+    "preferred_units" = c("select.*units.*want.*considered"),
+    "availability_monday" = c("availability.*monday"),
+    "availability_tuesday" = c("availability.*tuesday"),
+    "availability_wednesday" = c("availability.*wednesday"),
+    "availability_thursday" = c("availability.*thursday"),
+    "availability_friday" = c("availability.*friday"),
+    "lead_demonstrator_interest" = c("lead.*demonstrator.*selected.*choice"),
+    "lead_demonstrator_other" = c("lead.*demonstrator.*other.*text"),
+    "completed_training" = c("completed.*faculty.*science.*tutor.*demonstrator.*training"),
+    "desired_hours_per_week" = c("hours.*allocated.*per.*week"),
+    "planned_years" = c("years.*planning.*work"),
+    "expertise_area" = c("area.*expertise"),
+    "higher_education_degrees" = c("higher.*education.*degree.*major"),
+    "teaching_philosophy" = c("teaching.*philosophy"),
+    "experience_benefit" = c("experience.*benefit.*school"),
+    "blockout_dates" = c("blockout.*dates.*not.*available"),
+    "cv_file_id" = c("cv.*id$"),
+    "cv_file_name" = c("cv.*name$"),
+    "cv_file_size" = c("cv.*size$"),
+    "cv_file_type" = c("cv.*type$"),
+    "info_acknowledgment" = c("acknowledge.*information.*true.*correct"),
+    "info_amendment_acknowledgment" = c("circumstances.*change.*amend.*email")
+  )
+
+  # Get current column names (excluding the ones we want to remove)
+  current_cols <- names(data)
+  cols_to_keep <- current_cols[!current_cols %in% c(
+    "Start Date", "End Date", "Response Type",
+    "IP Address", "Progress", "Duration (in seconds)",
+    "Finished", "Recorded Date", "Response ID",
+    "Recipient Last Name", "Recipient First Name",
+    "Recipient Email", "External Data Reference",
+    "Location Latitude", "Location Longitude",
+    "Distribution Channel", "User Language"
+  )]
+
+  # Find matches using regex patterns
+  rename_vector <- c()
+  unmatched_columns <- c()
+
+  for (new_name in names(column_mapping)) {
+    pattern <- column_mapping[[new_name]]
+
+    # Find which current column matches the pattern
+    matches <- sapply(cols_to_keep, function(col) grepl(pattern, tolower(col), perl = TRUE))
+    matching_cols <- cols_to_keep[matches]
+
+    if (length(matching_cols) == 1) {
+      # Correct way: new_name = old_name for rename()
+      rename_vector[new_name] <- matching_cols
+    } else if (length(matching_cols) > 1) {
+      # If multiple matches, take the first one and warn
+      rename_vector[new_name] <- matching_cols[1]
+      message(sprintf(
+        "Multiple matches found for '%s': %s. Using '%s'",
+        new_name, paste(matching_cols, collapse = ", "), matching_cols[1]
+      ))
+    } else {
+      # No matches found
+      unmatched_columns <- c(unmatched_columns, new_name)
+    }
+  }
+
+  # Report unmatched columns
+  if (length(unmatched_columns) > 0) {
+    message("The following expected columns were not found:")
+    for (col in unmatched_columns) {
+      message(sprintf("  - %s not found", col))
+    }
+  }
+
+  # Define the final columns we want to keep
+  final_columns <- c(
+    "worked_at_usyd", "staff_id", "title", "surname", "given_name",
+    "preferred_email", "preferred_contact", "phd_conferred",
+    "previous_demonstrator", "previous_units", "preferred_units",
+    "availability_monday", "availability_tuesday", "availability_wednesday",
+    "availability_thursday", "availability_friday", "lead_demonstrator_interest",
+    "lead_demonstrator_other", "completed_training", "desired_hours_per_week",
+    "expertise_area", "higher_education_degrees", "teaching_philosophy",
+    "experience_benefit", "blockout_dates"
+    # Note: CV columns and acknowledgment columns are not in final_columns,
+    # so they will be effectively dropped by the select(any_of(final_columns))
+  )
+
+  # Apply renaming and return cleaned data with only specified columns
+  # The initial select(-c("Start Date":"User Language")) is handled by how `cols_to_keep` is defined.
+  data_cleaned <- data |>
+    dplyr::rename(!!!rename_vector) |> # Ensure dplyr::rename is used
+    dplyr::select(dplyr::any_of(final_columns)) # Ensure dplyr::select and dplyr::any_of are used
+
+  # Report which final columns are missing
+  missing_final_cols <- setdiff(final_columns, names(data_cleaned))
+  if (length(missing_final_cols) > 0) {
+    message("The following final columns are missing from the cleaned data:")
+    for (col in missing_final_cols) {
+      message(sprintf("  - %s", col))
+    }
+  }
+
+  return(data_cleaned)
+}
+
 #' Parse Expression of Interest (EOI) CSV File
 #'
-#' Reads an EOI CSV file, extracts relevant columns, and renames them
-#' according to a predefined schema. The function expects a specific CSV
-#' structure where actual headers are on the second row and data starts
-#' from the fourth row. The first 17 columns (based on the headers from
-#' the second row) are discarded.
+#' Reads an EOI CSV file, then uses a flexible renaming function to process columns.
+#' The function expects a specific CSV structure where actual headers are on the
+#' second row and data starts from the fourth row.
 #'
 #' @param path Character string; the file path to the EOI CSV file.
-#' @return A tibble containing the parsed and cleaned EOI data, with
-#'   selected columns renamed for clarity.
+#' @return A tibble containing the parsed and cleaned EOI data.
 #' @importFrom readr read_csv
-#' @importFrom dplyr select all_of any_of
 #' @export
 #' @examples
 #' \dontrun{
@@ -33,57 +148,8 @@ parse_eoi <- function(path) {
     name_repair = "minimal" # Avoids renaming issues if headers are problematic
   )
 
-  # Determine columns to keep (from the 18th to the end)
-  if (length(actual_headers) < 18) {
-    stop("The CSV file does not have enough columns (expected at least 18 based on header row).")
-  }
-  columns_to_keep_original_names <- actual_headers[18:length(actual_headers)]
-
-  data_subset <- dplyr::select(raw_data, dplyr::all_of(columns_to_keep_original_names))
-
-  # Define the new names for the selected columns
-  new_names <- c(
-    "worked_at_usyd", "staff_id", "title", "surname", "given_name",
-    "preferred_email", "preferred_contact", "suburb_postcode",
-    "valid_visa", "phd_conferred", "previous_demonstrator", "previous_units",
-    "preferred_units", "availability_monday", "availability_tuesday",
-    "availability_wednesday", "availability_thursday", "availability_friday",
-    "lead_demonstrator_interest", "lead_demonstrator_other",
-    "completed_training", "desired_hours_per_week",
-    "planned_years", "expertise_area", "higher_education_degrees",
-    "teaching_philosophy", "experience_benefit", "blockout_dates",
-    "cv_file_id", "cv_file_name", "cv_file_size", "cv_file_type",
-    "info_acknowledgment", "info_amendment_acknowledgment"
-  )
-
-  # Ensure the number of selected columns matches the number of new names
-  if (ncol(data_subset) != length(new_names)) {
-    # Add a more informative warning/error if counts don't match
-    warning_message <- paste0(
-      "Mismatch after selecting columns to rename. Expected ", length(new_names),
-      " columns based on 'new_names' definition, but got ", ncol(data_subset),
-      " columns (from original columns: '",
-      paste(columns_to_keep_original_names, collapse = "', '"), "'). ",
-      "Please check CSV structure and column selection logic (currently 18th to end)."
-    )
-    # Depending on strictness, this could be a stop()
-    warning(warning_message)
-    # If we proceed, names() will recycle or truncate, which is bad.
-    # It's safer to stop if the column count for renaming is not exact.
-    if (ncol(data_subset) != length(new_names)) { # Re-check for stop
-      stop("Critical mismatch in column count for renaming. Halting. ", warning_message)
-    }
-  }
-  names(data_subset) <- new_names
-
-  # Remove further unnecessary columns by their new names
-  columns_to_remove <- c(
-    "valid_visa", "suburb_postcode", "planned_years", "cv_file_id",
-    "cv_file_name", "cv_file_size", "cv_file_type", "info_acknowledgment",
-    "info_amendment_acknowledgment"
-  )
-
-  out <- dplyr::select(data_subset, -dplyr::any_of(columns_to_remove))
+  # Pass raw_data to the flexible renaming function
+  out <- rename_soles_columns_flexible(data = raw_data)
 
   return(out)
 }
@@ -466,7 +532,7 @@ create_eoi_profile <- function(applicant_data) {
   }
 
   profile_string <- sprintf(
-    "Name: %s %s (Title: %s)\nStaff ID: %s\nPreferred Contact: %s, %s\n\nPhD Conferred: %s\nPreviously Demonstrated: %s\nPrevious Units Taught: %s\nPreferred Units to Teach: %s\nDesired Hours per Week: %s\n\nAvailability:\n  Monday: %s\n  Tuesday: %s\n  Wednesday: %s\n  Thursday: %s\n  Friday: %s\nBlockout Dates: %s\n\nCompleted Demonstrator Training: %s\nInterested in Lead Demonstrator Role: %s\n%sExpertise Area:\n%s\n\nHigher Education Degrees:\n%s\n\nTeaching Philosophy:\n%s\n\nHow My Experience Will Benefit Student Learning:\n%s",
+    "Name: %s %s (Title: %s)\nStaff ID: %s\nPreferred Contact: %s, %s\n\nPhD Conferred: %s\nPreviously Demonstrated: %s\nPrevious Units Taught: %s\nPreferred Units to Teach: %s\n\nAvailability:\n  Monday: %s\n  Tuesday: %s\n  Wednesday: %s\n  Thursday: %s\n  Friday: %s\nBlockout Dates: %s\n\nCompleted Demonstrator Training: %s\nInterested in Lead Demonstrator Role: %s\n%sExpertise Area:\n%s\n\nHigher Education Degrees:\n%s\n\nTeaching Philosophy:\n%s\n\nHow My Experience Will Benefit Student Learning:\n%s",
     .get_val_or_default(ad$given_name),
     .get_val_or_default(ad$surname),
     .get_val_or_default(ad$title),
@@ -477,7 +543,6 @@ create_eoi_profile <- function(applicant_data) {
     .get_val_or_default(ad$previous_demonstrator),
     previous_units_display,
     preferred_units_display,
-    .get_val_or_default(ad$desired_hours_per_week),
     .get_val_or_default(ad$availability_monday),
     .get_val_or_default(ad$availability_tuesday),
     .get_val_or_default(ad$availability_wednesday),
