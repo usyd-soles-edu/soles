@@ -300,6 +300,28 @@ prepare_eoi <- function(processed_eoi_data, uos = NULL) {
       } else {
         logger::log_info(sprintf("No data to process for unit '%s' (as '%s') - data frame is empty. Skipping content generation.", unit_name, sanitized_unit_name))
       }
+      # Generate and add unit summary file
+      logger::log_debug(sprintf("Generating summary for unit: '%s'", unit_name))
+      # Define path structure first, using sanitized_unit_name for the folder.
+      # The filename for the summary should be "summary.md".
+      summary_file_path <- paste(sanitized_unit_name, "summary.md", sep = "/")
+
+      tryCatch(
+        {
+          # Call soles::generate_unit_summary with the full processed_eoi_data (as elist)
+          # and the current unit_name from the loop.
+          summary_content <- soles::generate_unit_summary(elist = processed_eoi_data, unit_name = unit_name)
+
+          # Append the new item (list with path and content) to output_files.
+          output_files[[length(output_files) + 1]] <- list(path = summary_file_path, content = summary_content)
+          logger::log_info(sprintf("Successfully generated and added summary.md for unit '%s' at path: %s", unit_name, summary_file_path))
+        },
+        error = function(e) {
+          logger::log_error(sprintf("Failed to generate summary.md for unit '%s' (intended path: %s): %s", unit_name, summary_file_path, e$message))
+          warning(sprintf("Failed to generate summary.md for unit '%s'. Error: %s. Intended path: %s. Skipping summary for this unit.", unit_name, e$message, summary_file_path))
+          # Continue to the next unit/iteration of the loop.
+        }
+      )
     }
     logger::log_info("All data frames have been processed for in-memory representation.")
   } else {

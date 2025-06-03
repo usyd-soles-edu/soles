@@ -70,48 +70,85 @@ generate_unit_summary <- function(elist, unit_name) {
     }
   }
 
-  # Helper function for formatting counts with correct grammar
-  # This function is defined within generate_unit_summary for local use.
-  format_count_phrase <- function(count, singular_noun, plural_noun, zero_prefix = "no") {
-    if (count == 0) {
-      return(paste(zero_prefix, plural_noun))
-    } else if (count == 1) {
-      return(paste("1", singular_noun))
-    } else {
-      return(paste(count, plural_noun))
-    }
+  # Calculate applicants who have previously demonstrated at SOLES
+  soles_returning_demonstrators_count <- 0
+  if ("previous_demonstrator" %in% names(selected_unit)) {
+    soles_returning_demonstrators_count <- sum(selected_unit[["previous_demonstrator"]] == "Yes", na.rm = TRUE)
+  } else {
+    warning(sprintf("Column 'previous_demonstrator' not found for unit '%s'. Assuming 0 previous SOLES demonstrators.", unit_name))
   }
 
   # Construct the concise summary string
   heading_line <- sprintf("### %s", unit_name)
 
-  # 1. Applicants phrase
-  applicants_phrase <- format_count_phrase(applicants, "applicant", "applicants")
-  applicants_sentence <- paste0(toupper(substr(applicants_phrase, 1, 1)), substr(applicants_phrase, 2, nchar(applicants_phrase)), ".")
+  # Sentence 1: Applicants
+  applicants_noun <- if (applicants == 1) "application" else "applications"
+  applicants_sentence <- sprintf("For this unit, there are %d %s.", applicants, applicants_noun)
 
-  # 2. PhD holders phrase
-  phd_holders_phrase <- format_count_phrase(total_phd_conferred, "PhD holder", "PhD holders")
-
-  phd_percentage_string <- ""
-  if (applicants > 0) {
-    phd_percentage_string <- sprintf(" (~%.0f%% of applicants)", (total_phd_conferred / applicants * 100))
+  # Sentence 2: PhD Holders
+  if (total_phd_conferred == 0) {
+    phd_sentence <- "Among the applicants, none hold a PhD."
   } else {
-    phd_percentage_string <- " (PhD % N/A)"
+    phd_verb <- if (total_phd_conferred == 1) "holds" else "hold"
+    phd_percentage_string <- ""
+    if (applicants > 0) {
+      phd_percentage <- (total_phd_conferred / applicants * 100)
+      phd_percentage_string <- sprintf("(around %.0f%%) ", phd_percentage)
+    } else { # total_phd_conferred > 0 but applicants == 0
+      phd_percentage_string <- "(PhD % N/A) "
+    }
+    phd_sentence <- sprintf(
+      "Among the applicants, %d %s%s a PhD.",
+      total_phd_conferred,
+      phd_percentage_string,
+      phd_verb
+    )
   }
-  phd_sentence <- paste0(toupper(substr(phd_holders_phrase, 1, 1)), substr(phd_holders_phrase, 2, nchar(phd_holders_phrase)), phd_percentage_string, ".")
 
-  # 3. Returning educators phrase
-  returning_educators_sentence <- ""
+  # Sentence 3: Experience
+  # SOLES Experience Part
+  soles_experience_phrase <- ""
+  if (soles_returning_demonstrators_count == 0) {
+    soles_experience_phrase <- "none have prior experience demonstrating at SOLES"
+  } else {
+    soles_verb <- if (soles_returning_demonstrators_count == 1) "has" else "have"
+    soles_percentage_string <- ""
+    if (applicants > 0) {
+      soles_percentage <- (soles_returning_demonstrators_count / applicants * 100)
+      soles_percentage_string <- sprintf("(%.0f%%) ", soles_percentage)
+    } else { # soles_returning_demonstrators_count > 0 but applicants == 0
+      soles_percentage_string <- "(% N/A) "
+    }
+    soles_experience_phrase <- sprintf(
+      "%d %s%s prior experience demonstrating at SOLES",
+      soles_returning_demonstrators_count,
+      soles_percentage_string,
+      soles_verb
+    )
+  }
+
+  # Unit Taught Part
+  unit_taught_phrase <- ""
   if (returning_educators == 0) {
-    no_returning_educators_phrase <- format_count_phrase(0, "returning educator", "returning educators")
-    returning_educators_sentence <- paste0(toupper(substr(no_returning_educators_phrase, 1, 1)), substr(no_returning_educators_phrase, 2, nchar(no_returning_educators_phrase)), ".")
+    unit_taught_phrase <- "none have taught this particular unit before"
   } else {
-    returning_educators_base_phrase <- format_count_phrase(returning_educators, "returning educator", "returning educators")
-    returning_educators_sentence <- paste0(toupper(substr(returning_educators_base_phrase, 1, 1)), substr(returning_educators_base_phrase, 2, nchar(returning_educators_base_phrase)), " had taught this unit previously.")
+    unit_verb <- if (returning_educators == 1) "has" else "have"
+    unit_taught_phrase <- sprintf(
+      "%d %s taught this particular unit before",
+      returning_educators,
+      unit_verb
+    )
   }
+
+  experience_sentence <- sprintf(
+    "In terms of specific experience, %s and %s.",
+    soles_experience_phrase,
+    unit_taught_phrase
+  )
+
 
   # Combine all parts into a paragraph
-  summary_paragraph <- paste(applicants_sentence, phd_sentence, returning_educators_sentence, sep = " ")
+  summary_paragraph <- paste(applicants_sentence, phd_sentence, experience_sentence, sep = " ")
 
   full_summary <- paste(heading_line, summary_paragraph, sep = "\n")
 
