@@ -366,11 +366,15 @@ server <- function(input, output, session) {
   })
 
   output$unique_units_output <- shiny::renderText({
-    data <- parsed_data_reactive()
-    if (is.null(data) || !is.data.frame(data) || nrow(data) == 0 || !("preferred_units" %in% names(data))) {
+    extracted_units <- extracted_data_reactive() # Use this reactive value
+
+    # Check if extracted_units is NULL, not a character vector, or empty
+    if (is.null(extracted_units) || !is.character(extracted_units) || length(extracted_units) == 0) {
       return("N/A")
     }
-    as.character(length(unique(data$preferred_units)))
+
+    # The length of extracted_units is the count of unique units
+    as.character(length(extracted_units))
   })
 
   output$phd_applicants_output <- shiny::renderText({
