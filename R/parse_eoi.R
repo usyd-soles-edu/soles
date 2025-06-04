@@ -151,6 +151,10 @@ parse_eoi <- function(path) {
   # Pass raw_data to the flexible renaming function
   out <- rename_soles_columns_flexible(data = raw_data)
 
+  if ("preferred_units" %in% names(out)) {
+    out <- out |>
+      dplyr::filter(!(is.na(preferred_units) | preferred_units == ""))
+  }
   return(out)
 }
 
