@@ -10,7 +10,7 @@
 \item{value}{The value to check.}
 }
 \value{
-\code{TRUE} if the value is \code{NA} or \code{""}, \code{FALSE} otherwise.
+\code{TRUE} if the value is \code{NULL}, \code{NA}, or an empty string (\code{""}), \code{FALSE} otherwise.
 }
 \description{
 Internal helper function to determine if a given value is NA or an empty string.

@@ -1,4 +1,28 @@
 # Alternative approach with more flexible keyword matching
+#' Rename Columns Flexibly for SOLES EOI Data
+#'
+#' This helper function renames columns of a data frame based on a predefined
+#' mapping using regular expressions. It's designed to handle variations in
+#' column names from EOI (Expression of Interest) forms. It also selects a
+#' specific set of final columns.
+#'
+#' @param data A data frame or tibble; the raw EOI data.
+#' @return A tibble with renamed and selected columns. Columns that are expected
+#'   but not found, or columns that have multiple matches, will generate messages.
+#' @importFrom dplyr rename select any_of
+#' @noRd
+#' @examples
+#' \dontrun{
+#' # mock_raw_data <- data.frame(
+#' #   "What is your surname or family name?" = "Test",
+#' #   "What is your given name(s)?" = "User",
+#' #   "Which units would you like to be considered for?" = "INFO1111",
+#' #   "Start Date" = "2023-01-01", # This column will be dropped
+#' #   check.names = FALSE
+#' # )
+#' # cleaned_data <- rename_soles_columns_flexible(mock_raw_data)
+#' # print(names(cleaned_data))
+#' }
 rename_soles_columns_flexible <- function(data) {
   # Define mapping with more specific patterns to avoid conflicts
   column_mapping <- list(
@@ -121,18 +145,37 @@ rename_soles_columns_flexible <- function(data) {
 #'
 #' Reads an EOI CSV file, then uses a flexible renaming function to process columns.
 #' The function expects a specific CSV structure where actual headers are on the
-#' second row and data starts from the fourth row.
+#' second row and data starts from the fourth row. It also filters out rows
+#' where 'preferred_units' is NA or an empty string.
 #'
 #' @param path Character string; the file path to the EOI CSV file.
-#' @return A tibble containing the parsed and cleaned EOI data.
+#' @return A tibble containing the parsed, cleaned, and filtered EOI data.
 #' @importFrom readr read_csv
+#' @importFrom dplyr filter
 #' @export
 #' @examples
 #' \dontrun{
-#' # Assuming an EOI_data.csv file exists in the working directory
-#' # with the expected structure.
-#' # eoi_data <- parse_eoi("EOI_data.csv")
-#' # print(head(eoi_data))
+#' # Create a dummy CSV file for the example
+#' temp_csv_content <- paste(
+#'   "Col1,Col2,Col3",
+#'   "Question Text,What is your surname or family name?,Which units would you like to be considered for?",
+#'   "ResponseID,Q1,Q2",
+#'   "1,Smith,INFO1111",
+#'   "2,Doe,COMP2222",
+#'   "3,Jones,", # Empty preferred_units
+#'   "4,Brown,NA", # NA preferred_units
+#'   sep = "\n"
+#' )
+#' temp_file <- tempfile(fileext = ".csv")
+#' writeLines(temp_csv_content, temp_file)
+#'
+#' # Parse the dummy EOI data
+#' eoi_data <- parse_eoi(temp_file)
+#' print(head(eoi_data))
+#' # Expected output should not contain Jones or Brown if filter is applied correctly.
+#'
+#' # Clean up the dummy file
+#' unlink(temp_file)
 #' }
 parse_eoi <- function(path) {
   # Read the actual column headers from the second row of the CSV
@@ -174,16 +217,19 @@ parse_eoi <- function(path) {
 #' @export
 #' @examples
 #' \dontrun{
-#' # mock_data <- data.frame(
-#' #   surname = c("Smith", "Doe", "King"),
-#' #   preferred_units = c("INFO1111, COMP2222", "INFO1111, DATA3333, ", NA_character_),
-#' #   stringsAsFactors = FALSE
-#' # )
-#' # eoi_extract(mock_data)
-#' # # Expected: c("INFO1111", "COMP2222", "DATA3333", "", NA) or similar order
+#' mock_data <- data.frame(
+#'   surname = c("Smith", "Doe", "King"),
+#'   preferred_units = c("INFO1111, COMP2222", "INFO1111, DATA3333, ", NA_character_),
+#'   stringsAsFactors = FALSE
+#' )
+#' eoi_extract(mock_data)
+#' # Expected: c("INFO1111", "COMP2222", "DATA3333", "", NA) or similar order
 #'
-#' # mock_data_empty <- data.frame(surname="Solo", preferred_units=character(0))
-#' # eoi_extract(mock_data_empty) # Expected: NULL
+#' mock_data_empty_col <- data.frame(surname = "Solo", preferred_units = character(0))
+#' eoi_extract(mock_data_empty_col) # Expected: NULL
+#'
+#' mock_data_no_col <- data.frame(surname = "NoUnitsField")
+#' # eoi_extract(mock_data_no_col) # This would error, as expected.
 #' }
 eoi_extract <- function(df) {
   if (!"preferred_units" %in% colnames(df)) {
@@ -206,7 +252,8 @@ eoi_extract <- function(df) {
 #' Prepare EOI Data for Archiving
 #'
 #' Processes a list of data frames (EOI data), generating in-memory CSV content
-#' for each. This is suitable for creating archives without disk I/O.
+#' for each, along with a summary markdown file. This is suitable for creating
+#' archives without disk I/O.
 #'
 #' @param processed_eoi_data A named list of data frames. Each name is a unit
 #'   code, and each data frame contains the processed EOI data for that unit.
@@ -214,11 +261,35 @@ eoi_extract <- function(df) {
 #' @param uos Optional. A character vector of unit of study codes. If provided,
 #'   only data for these units will be processed. If NULL (default), all data is processed.
 #' @return A list of lists. Each inner list has:
-#'   \code{path}: Intended relative path in an archive (e.g., "UNIT_CODE/UNIT_CODE_data.csv").
-#'   \code{content}: CSV content as a character string.
+#'   \code{path}: Intended relative path in an archive (e.g., "UNIT_CODE/UNIT_CODE_data.csv" or "UNIT_CODE/summary.md").
+#'   \code{content}: CSV content as a character string for data files, or Markdown content for summary files.
 #' @importFrom readr format_csv
 #' @importFrom logger log_info log_debug log_warn log_error
 #' @export
+#' @examples
+#' \dontrun{
+#' # Mock processed EOI data
+#' mock_df_info1111 <- data.frame(surname = "Smith", preferred_units = "INFO1111")
+#' mock_df_comp2222 <- data.frame(surname = "Doe", preferred_units = "COMP2222")
+#' mock_processed_data <- list(
+#'   INFO1111 = mock_df_info1111,
+#'   COMP2222 = mock_df_comp2222
+#' )
+#'
+#' # Prepare data for all units
+#' archive_content_all <- prepare_eoi(mock_processed_data)
+#' print(length(archive_content_all)) # Expected: 4 (2 CSVs, 2 summaries)
+#' print(sapply(archive_content_all, function(x) x$path))
+#'
+#' # Prepare data for a specific unit
+#' archive_content_info <- prepare_eoi(mock_processed_data, uos = "INFO1111")
+#' print(length(archive_content_info)) # Expected: 2 (1 CSV, 1 summary for INFO1111)
+#' print(sapply(archive_content_info, function(x) x$path))
+#'
+#' # Example with a unit not present
+#' archive_content_missing <- prepare_eoi(mock_processed_data, uos = "PHYS1001")
+#' print(length(archive_content_missing)) # Expected: 0
+#' }
 prepare_eoi <- function(processed_eoi_data, uos = NULL) {
   logger::log_debug(sprintf(
     "Entering prepare_eoi. Number of data frames in list: %d",
@@ -344,42 +415,55 @@ prepare_eoi <- function(processed_eoi_data, uos = NULL) {
 #' @param df A data frame or tibble; the EOI data to be processed. Must contain
 #'   a column named 'preferred_units'.
 #' @param unit_list A character vector of unique unit codes to filter by.
-#'   Typically generated by \code{\link{eoi_extract}}.
+#'   Typically generated by \code{\link{eoi_extract}}. Can be NULL or empty,
+#'   in which case an empty list is returned.
 #' @return A named list of data frames, where each element is named
 #'   after a unit code and contains the filtered EOI data for that unit.
 #'   The list can be passed to \code{\link{prepare_eoi}} for archiving.
+#'   Returns an empty list if `df` is empty, or if `unit_list` is NULL or empty.
 #' @importFrom logger log_info log_debug log_warn log_error
 #' @export
 #' @examples
 #' \dontrun{
-#' # mock_eoi_data <- data.frame(
-#' #   surname = c("Smith", "Doe", "Chan"),
-#' #   preferred_units = c("INFO1111, COMP2222", "INFO1111, DATA3333", "COMP2222"),
-#' #   stringsAsFactors = FALSE
-#' # )
-#' # mock_units <- c("INFO1111", "COMP2222", "DATA3333")
-#' #
-#' # # Process data
-#' # processed_data <- process_eoi_data(mock_eoi_data, mock_units)
-#' # print(names(processed_data))
-#' #
-#' # # Optionally, save the processed data
-#' # # temp_output_dir <- tempfile("eoi_output_")
-#' # # prepare_eoi(processed_data) # Renamed from download_eoi_data
-#' # # list.files(temp_output_dir, recursive = TRUE)
-#' # # unlink(temp_output_dir, recursive = TRUE) # Clean up
+#' mock_eoi_data <- data.frame(
+#'   surname = c("Smith", "Doe", "Chan", "Lee"),
+#'   preferred_units = c("INFO1111, COMP2222", "INFO1111, DATA3333", "COMP2222", NA_character_),
+#'   stringsAsFactors = FALSE
+#' )
+#' mock_units <- c("INFO1111", "COMP2222", "DATA3333", "PHYS1001") # PHYS1001 not in data
+#'
+#' # Process data
+#' processed_data <- process_eoi_data(mock_eoi_data, mock_units)
+#' print(names(processed_data)) # Expected: "INFO1111" "COMP2222" "DATA3333" "PHYS1001"
+#' print(processed_data$INFO1111) # Smith, Doe
+#' print(processed_data$COMP2222) # Smith, Chan
+#' print(processed_data$DATA3333) # Doe
+#' print(processed_data$PHYS1001) # Empty data frame
+#'
+#' # Example with empty unit list
+#' processed_empty_units <- process_eoi_data(mock_eoi_data, character(0))
+#' print(length(processed_empty_units)) # Expected: 0
+#'
+#' # Example with empty data frame
+#' processed_empty_df <- process_eoi_data(mock_eoi_data[0, ], mock_units)
+#' print(length(processed_empty_df)) # Expected: 0
 #' }
 process_eoi_data <- function(df, unit_list) {
   logger::log_debug("Starting process_eoi_data function.")
   logger::log_debug(sprintf("Input df has %d rows and %d columns.", nrow(df), ncol(df)))
-  logger::log_debug(sprintf("Input unit_list contains: %s", paste(unit_list, collapse = ", ")))
+  if (!is.null(unit_list) && length(unit_list) > 0) {
+    logger::log_debug(sprintf("Input unit_list contains: %s", paste(unit_list, collapse = ", ")))
+  } else {
+    logger::log_debug("Input unit_list is NULL or empty.")
+  }
+
 
   # Input validation
   if (!is.data.frame(df)) {
     logger::log_error("'df' must be a data frame.")
     stop("'df' must be a data frame.")
   }
-  if (!"preferred_units" %in% colnames(df)) {
+  if (!"preferred_units" %in% colnames(df) && nrow(df) > 0) { # Check only if df not empty
     logger::log_error("The data frame 'df' does not contain a 'preferred_units' column.")
     stop("The data frame 'df' does not contain a 'preferred_units' column.")
   }
@@ -393,11 +477,11 @@ process_eoi_data <- function(df, unit_list) {
   if (is.null(unit_list) || length(unit_list) == 0 || nrow(df) == 0) {
     if (nrow(df) == 0) {
       logger::log_warn("The input data frame ('df') is empty. No filtering performed.")
-      warning("The input data frame ('df') is empty. No filtering performed.")
+      # warning("The input data frame ('df') is empty. No filtering performed.") # Redundant with log
     }
     if (is.null(unit_list) || length(unit_list) == 0) {
       logger::log_warn("The 'unit_list' vector is NULL or empty. No units to filter by.")
-      warning("The 'unit_list' vector is NULL or empty. No units to filter by.")
+      # warning("The 'unit_list' vector is NULL or empty. No units to filter by.") # Redundant with log
     }
     logger::log_info("Returning empty list as no filtering can be done.")
     return(filtered_data_frames_by_unit) # Return directly, not invisibly
@@ -406,11 +490,18 @@ process_eoi_data <- function(df, unit_list) {
   logger::log_info("Starting to filter data by unit list.")
   filtered_data_frames_by_unit <- lapply(unit_list, function(unit_name) {
     logger::log_debug(sprintf("Filtering for unit: %s", unit_name))
-    preferred_units_no_na <- ifelse(is.na(df$preferred_units), "", df$preferred_units)
-    matching_rows_indices <- grepl(unit_name, preferred_units_no_na, fixed = TRUE)
-    filtered_df_for_unit <- df[matching_rows_indices, , drop = FALSE]
-    logger::log_debug(sprintf("Found %d applicants for unit: %s", nrow(filtered_df_for_unit), unit_name))
-    return(filtered_df_for_unit)
+    # Ensure preferred_units exists before trying to access it
+    if ("preferred_units" %in% names(df)) {
+      preferred_units_no_na <- ifelse(is.na(df$preferred_units), "", df$preferred_units)
+      matching_rows_indices <- grepl(unit_name, preferred_units_no_na, fixed = TRUE)
+      filtered_df_for_unit <- df[matching_rows_indices, , drop = FALSE]
+      logger::log_debug(sprintf("Found %d applicants for unit: %s", nrow(filtered_df_for_unit), unit_name))
+      return(filtered_df_for_unit)
+    } else {
+      # Should not happen if initial checks are robust, but as a safeguard
+      logger::log_warn(sprintf("Column 'preferred_units' not found while filtering for unit %s. Returning empty data frame for this unit.", unit_name))
+      return(df[0, , drop = FALSE]) # Return empty df structure
+    }
   })
   names(filtered_data_frames_by_unit) <- unit_list
   logger::log_info("Finished filtering data by unit list.")
@@ -426,9 +517,13 @@ process_eoi_data <- function(df, unit_list) {
 #' Designed for scalar inputs.
 #'
 #' @param value The value to check.
-#' @return \code{TRUE} if the value is \code{NA} or \code{""}, \code{FALSE} otherwise.
+#' @return \code{TRUE} if the value is \code{NULL}, \code{NA}, or an empty string (\code{""}), \code{FALSE} otherwise.
 #' @keywords internal
 .is_empty_or_na <- function(value) {
+  if (is.null(value)) { # Check for NULL first
+    return(TRUE)
+  }
+  # Original logic for non-NULL values:
   if (length(value) != 1) {
     # This warning can be noisy if called many times with vectors;
     # for internal use, ensure scalar input or adapt function.
@@ -479,112 +574,95 @@ process_eoi_data <- function(df, unit_list) {
 #' @export
 #' @examples
 #' \dontrun{
-#' # mock_applicant <- list(
-#' #   given_name = "John", surname = "Doe", title = "Mr",
-#' #   worked_at_usyd = "Yes", staff_id = "12345",
-#' #   preferred_email = "john.doe@example.com", preferred_contact = "0400123456",
-#' #   phd_conferred = "Yes",
-#' #   previous_demonstrator = "Yes", previous_units = "INFO101, COMP201",
-#' #   preferred_units = "DATA301, INFO500",
-#' #   desired_hours_per_week = "10-15",
-#' #   availability_monday = "All day", availability_tuesday = "AM",
-#' #   availability_wednesday = "PM", availability_thursday = "Not available",
-#' #   availability_friday = "All day",
-#' #   blockout_dates = "Dec 20-Jan 5",
-#' #   completed_training = "Yes",
-#' #   lead_demonstrator_interest = "Yes - for specific units",
-#' #   lead_demonstrator_other = NA,
-#' #   expertise_area = "Data Science, Machine Learning",
-#' #   higher_education_degrees = "PhD in CS, MSc in Stats",
-#' #   teaching_philosophy = "Interactive and engaging.",
-#' #   experience_benefit = "Real-world project experience."
-#' # )
-#' # profile <- create_eoi_profile(mock_applicant)
-#' # # The profile string is also printed to the console.
+#' mock_applicant <- list(
+#'   given_name = "Jane", surname = "Doe", title = "Dr",
+#'   worked_at_usyd = "Yes", staff_id = "9876543",
+#'   preferred_email = "jane.doe@example.com", preferred_contact = "0412345678",
+#'   phd_conferred = "Yes",
+#'   previous_demonstrator = "No", previous_units = NA, # or ""
+#'   preferred_units = "DATA4001, COMP5002",
+#'   desired_hours_per_week = "Up to 20",
+#'   availability_monday = "Not available", availability_tuesday = "Full Day",
+#'   availability_wednesday = "AM only", availability_thursday = "PM only",
+#'   availability_friday = "Full Day",
+#'   blockout_dates = "None",
+#'   completed_training = "Yes, in 2022",
+#'   lead_demonstrator_interest = "Maybe",
+#'   lead_demonstrator_other = "Interested in curriculum development support",
+#'   expertise_area = "Statistical Modeling, Bioinformatics",
+#'   higher_education_degrees = "PhD (Statistics), BSc (Biology)",
+#'   teaching_philosophy = "Student-centered and practical.",
+#'   experience_benefit = "Industry experience in data analysis."
+#' )
+#' profile_string <- create_eoi_profile(mock_applicant)
+#' # cat(profile_string) # To see the output as it would be printed
+#'
+#' # Example with a data frame row
+#' mock_applicant_df <- as.data.frame(mock_applicant)
+#' profile_string_df <- create_eoi_profile(mock_applicant_df)
+#' # cat(profile_string_df)
 #' }
 create_eoi_profile <- function(applicant_data) {
-  ad <- applicant_data
-
-  if (is.data.frame(ad) && nrow(ad) == 1) {
-    ad <- as.list(ad)
-  } else if (!is.list(ad)) {
-    stop("applicant_data must be a list or a single-row data frame/tibble.")
-  }
-
-  staff_id_val <- ad$staff_id
-  staff_id_display <- if (!.is_empty_or_na(ad$worked_at_usyd) && ad$worked_at_usyd == "Yes" &&
-    !.is_empty_or_na(staff_id_val)) {
-    staff_id_val
-  } else {
-    "N/A"
-  }
-
-  previous_units_val <- ad$previous_units
-  previous_units_display <- if (!.is_empty_or_na(ad$previous_demonstrator) && ad$previous_demonstrator == "Yes" &&
-    !.is_empty_or_na(previous_units_val)) {
-    previous_units_val
-  } else {
-    "N/A"
-  }
-
-  blockout_dates_display <- .get_val_or_default(ad$blockout_dates, "None specified")
-
-  lead_demonstrator_other_line <- ""
-  lead_interest_val <- ad$lead_demonstrator_interest
-  if (!.is_empty_or_na(lead_interest_val) &&
-    grepl("other", tolower(lead_interest_val), fixed = TRUE)) {
-    lead_demonstrator_other_line <- sprintf(
-      "  Other Details: %s\n",
-      .get_val_or_default(ad$lead_demonstrator_other)
-    )
-  }
-
-  # Process preferred_units for display
-  preferred_units_raw_val <- .get_val_or_default(ad$preferred_units)
-  if (identical(preferred_units_raw_val, "N/A") || identical(preferred_units_raw_val, "")) {
-    preferred_units_display <- "N/A"
-  } else {
-    units_vec <- trimws(strsplit(preferred_units_raw_val, ",")[[1]])
-    units_vec <- units_vec[units_vec != ""] # Remove empty strings after split
-
-    if (length(units_vec) == 0) {
-      preferred_units_display <- "N/A"
-    } else {
-      # Each unit starts with a newline, then indentation and bullet
-      formatted_units <- paste0("\n  - ", units_vec)
-      # Collapse them into a single string
-      preferred_units_display <- paste(formatted_units, collapse = "")
+  # Ensure applicant_data is a list-like structure (list or single-row data frame)
+  if (is.data.frame(applicant_data)) {
+    if (nrow(applicant_data) != 1) {
+      stop("If applicant_data is a data frame, it must contain only one row.")
     }
+    # Convert single-row data frame to a list for consistent access
+    ad <- as.list(applicant_data)
+  } else if (is.list(applicant_data)) {
+    ad <- applicant_data
+  } else {
+    stop("applicant_data must be a list or a single-row data frame.")
   }
 
-  profile_string <- sprintf(
-    "Name: %s %s (Title: %s)\nStaff ID: %s\nPreferred Contact: %s, %s\n\nPhD Conferred: %s\nPreviously Demonstrated: %s\nPrevious Units Taught: %s\nPreferred Units to Teach: %s\n\nAvailability:\n  Monday: %s\n  Tuesday: %s\n  Wednesday: %s\n  Thursday: %s\n  Friday: %s\nBlockout Dates: %s\n\nCompleted Demonstrator Training: %s\nInterested in Lead Demonstrator Role: %s\n%sExpertise Area:\n%s\n\nHigher Education Degrees:\n%s\n\nTeaching Philosophy:\n%s\n\nHow My Experience Will Benefit Student Learning:\n%s",
-    .get_val_or_default(ad$given_name),
-    .get_val_or_default(ad$surname),
-    .get_val_or_default(ad$title),
-    staff_id_display,
-    .get_val_or_default(ad$preferred_email),
-    .get_val_or_default(ad$preferred_contact),
-    .get_val_or_default(ad$phd_conferred),
-    .get_val_or_default(ad$previous_demonstrator),
-    previous_units_display,
-    preferred_units_display,
-    .get_val_or_default(ad$availability_monday),
-    .get_val_or_default(ad$availability_tuesday),
-    .get_val_or_default(ad$availability_wednesday),
-    .get_val_or_default(ad$availability_thursday),
-    .get_val_or_default(ad$availability_friday),
-    blockout_dates_display,
-    .get_val_or_default(ad$completed_training),
-    .get_val_or_default(ad$lead_demonstrator_interest),
-    lead_demonstrator_other_line,
-    .get_val_or_default(ad$expertise_area), # Uses default "N/A"
-    .get_val_or_default(ad$higher_education_degrees), # Uses default "N/A"
-    .get_val_or_default(ad$teaching_philosophy), # Uses default "N/A"
-    .get_val_or_default(ad$experience_benefit) # Uses default "N/A"
+  # Helper to safely get values, using .get_val_or_default
+  # This ensures that if a field is missing entirely from `ad`, it doesn't error out
+  # but instead .get_val_or_default handles `NULL` input from `ad$non_existent_field`.
+  # .get_val_or_default is designed for scalar inputs, so `ad[[field_name]]` is preferred
+  # over `ad$field_name` if `ad` could have multiple elements with the same name (not typical for EOI).
+  # However, `ad$field_name` is more idiomatic for lists where names are unique.
+  # We assume unique names from EOI data.
+  get_val <- function(field_name, default = "N/A") {
+    val <- ad[[field_name]] # Use [[ to get NULL if not present, not error
+    .get_val_or_default(val, default)
+  }
+
+  profile <- paste0(
+    "Applicant Profile:\n",
+    "--------------------------------------------------\n",
+    "Personal Details:\n",
+    sprintf("  Name: %s %s %s\n", get_val("title"), get_val("given_name"), get_val("surname")),
+    sprintf("  USYD Staff: %s (ID: %s)\n", get_val("worked_at_usyd"), get_val("staff_id", "Not Provided")),
+    sprintf("  Email: %s\n", get_val("preferred_email")),
+    sprintf("  Contact: %s\n", get_val("preferred_contact")),
+    sprintf("  PhD Conferred: %s\n", get_val("phd_conferred")),
+    "--------------------------------------------------\n",
+    "Teaching Experience & Preferences:\n",
+    sprintf("  Previous SOLES Demonstrator: %s\n", get_val("previous_demonstrator")),
+    sprintf("  Previous Units Taught: %s\n", get_val("previous_units")),
+    sprintf("  Preferred Units for Consideration: %s\n", get_val("preferred_units")),
+    sprintf("  Desired Hours per Week: %s\n", get_val("desired_hours_per_week")),
+    "--------------------------------------------------\n",
+    "Availability:\n",
+    sprintf("  Monday: %s\n", get_val("availability_monday")),
+    sprintf("  Tuesday: %s\n", get_val("availability_tuesday")),
+    sprintf("  Wednesday: %s\n", get_val("availability_wednesday")),
+    sprintf("  Thursday: %s\n", get_val("availability_thursday")),
+    sprintf("  Friday: %s\n", get_val("availability_friday")),
+    sprintf("  Blockout Dates: %s\n", get_val("blockout_dates")),
+    "--------------------------------------------------\n",
+    "Additional Information:\n",
+    sprintf("  Completed Faculty Training: %s\n", get_val("completed_training")),
+    sprintf("  Interest in Lead Demonstrator Role: %s\n", get_val("lead_demonstrator_interest")),
+    sprintf("    Details (if other): %s\n", get_val("lead_demonstrator_other", "N/A or not specified")),
+    sprintf("  Area(s) of Expertise: %s\n", get_val("expertise_area")),
+    sprintf("  Higher Education Degrees & Majors: %s\n", get_val("higher_education_degrees")),
+    sprintf("  Teaching Philosophy: %s\n", get_val("teaching_philosophy")),
+    sprintf("  How Experience Benefits School: %s\n", get_val("experience_benefit")),
+    "--------------------------------------------------\n"
   )
 
-  cat(profile_string)
-  cat("\n")
-  return(invisible(profile_string))
+  cat(profile)
+  return(invisible(profile)) # Return invisibly as cat already prints
 }

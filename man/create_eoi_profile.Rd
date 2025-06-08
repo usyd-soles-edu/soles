@@ -22,27 +22,32 @@ Interest (EOI) details. This is typically used for display or textual reports.
 }
 \examples{
 \dontrun{
-# mock_applicant <- list(
-#   given_name = "John", surname = "Doe", title = "Mr",
-#   worked_at_usyd = "Yes", staff_id = "12345",
-#   preferred_email = "john.doe@example.com", preferred_contact = "0400123456",
-#   phd_conferred = "Yes",
-#   previous_demonstrator = "Yes", previous_units = "INFO101, COMP201",
-#   preferred_units = "DATA301, INFO500",
-#   desired_hours_per_week = "10-15",
-#   availability_monday = "All day", availability_tuesday = "AM",
-#   availability_wednesday = "PM", availability_thursday = "Not available",
-#   availability_friday = "All day",
-#   blockout_dates = "Dec 20-Jan 5",
-#   completed_training = "Yes",
-#   lead_demonstrator_interest = "Yes - for specific units",
-#   lead_demonstrator_other = NA,
-#   expertise_area = "Data Science, Machine Learning",
-#   higher_education_degrees = "PhD in CS, MSc in Stats",
-#   teaching_philosophy = "Interactive and engaging.",
-#   experience_benefit = "Real-world project experience."
-# )
-# profile <- create_eoi_profile(mock_applicant)
-# # The profile string is also printed to the console.
+mock_applicant <- list(
+  given_name = "Jane", surname = "Doe", title = "Dr",
+  worked_at_usyd = "Yes", staff_id = "9876543",
+  preferred_email = "jane.doe@example.com", preferred_contact = "0412345678",
+  phd_conferred = "Yes",
+  previous_demonstrator = "No", previous_units = NA, # or ""
+  preferred_units = "DATA4001, COMP5002",
+  desired_hours_per_week = "Up to 20",
+  availability_monday = "Not available", availability_tuesday = "Full Day",
+  availability_wednesday = "AM only", availability_thursday = "PM only",
+  availability_friday = "Full Day",
+  blockout_dates = "None",
+  completed_training = "Yes, in 2022",
+  lead_demonstrator_interest = "Maybe",
+  lead_demonstrator_other = "Interested in curriculum development support",
+  expertise_area = "Statistical Modeling, Bioinformatics",
+  higher_education_degrees = "PhD (Statistics), BSc (Biology)",
+  teaching_philosophy = "Student-centered and practical.",
+  experience_benefit = "Industry experience in data analysis."
+)
+profile_string <- create_eoi_profile(mock_applicant)
+# cat(profile_string) # To see the output as it would be printed
+
+# Example with a data frame row
+mock_applicant_df <- as.data.frame(mock_applicant)
+profile_string_df <- create_eoi_profile(mock_applicant_df)
+# cat(profile_string_df)
 }
 }

@@ -10,18 +10,36 @@ parse_eoi(path)
 \item{path}{Character string; the file path to the EOI CSV file.}
 }
 \value{
-A tibble containing the parsed and cleaned EOI data.
+A tibble containing the parsed, cleaned, and filtered EOI data.
 }
 \description{
 Reads an EOI CSV file, then uses a flexible renaming function to process columns.
 The function expects a specific CSV structure where actual headers are on the
-second row and data starts from the fourth row.
+second row and data starts from the fourth row. It also filters out rows
+where 'preferred_units' is NA or an empty string.
 }
 \examples{
 \dontrun{
-# Assuming an EOI_data.csv file exists in the working directory
-# with the expected structure.
-# eoi_data <- parse_eoi("EOI_data.csv")
-# print(head(eoi_data))
+# Create a dummy CSV file for the example
+temp_csv_content <- paste(
+  "Col1,Col2,Col3",
+  "Question Text,What is your surname or family name?,Which units would you like to be considered for?",
+  "ResponseID,Q1,Q2",
+  "1,Smith,INFO1111",
+  "2,Doe,COMP2222",
+  "3,Jones,", # Empty preferred_units
+  "4,Brown,NA", # NA preferred_units
+  sep = "\n"
+)
+temp_file <- tempfile(fileext = ".csv")
+writeLines(temp_csv_content, temp_file)
+
+# Parse the dummy EOI data
+eoi_data <- parse_eoi(temp_file)
+print(head(eoi_data))
+# Expected output should not contain Jones or Brown if filter is applied correctly.
+
+# Clean up the dummy file
+unlink(temp_file)
 }
 }

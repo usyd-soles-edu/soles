@@ -16,10 +16,36 @@ only data for these units will be processed. If NULL (default), all data is proc
 }
 \value{
 A list of lists. Each inner list has:
-\code{path}: Intended relative path in an archive (e.g., "UNIT_CODE/UNIT_CODE_data.csv").
-\code{content}: CSV content as a character string.
+\code{path}: Intended relative path in an archive (e.g., "UNIT_CODE/UNIT_CODE_data.csv" or "UNIT_CODE/summary.md").
+\code{content}: CSV content as a character string for data files, or Markdown content for summary files.
 }
 \description{
 Processes a list of data frames (EOI data), generating in-memory CSV content
-for each. This is suitable for creating archives without disk I/O.
+for each, along with a summary markdown file. This is suitable for creating
+archives without disk I/O.
+}
+\examples{
+\dontrun{
+# Mock processed EOI data
+mock_df_info1111 <- data.frame(surname = "Smith", preferred_units = "INFO1111")
+mock_df_comp2222 <- data.frame(surname = "Doe", preferred_units = "COMP2222")
+mock_processed_data <- list(
+  INFO1111 = mock_df_info1111,
+  COMP2222 = mock_df_comp2222
+)
+
+# Prepare data for all units
+archive_content_all <- prepare_eoi(mock_processed_data)
+print(length(archive_content_all)) # Expected: 4 (2 CSVs, 2 summaries)
+print(sapply(archive_content_all, function(x) x$path))
+
+# Prepare data for a specific unit
+archive_content_info <- prepare_eoi(mock_processed_data, uos = "INFO1111")
+print(length(archive_content_info)) # Expected: 2 (1 CSV, 1 summary for INFO1111)
+print(sapply(archive_content_info, function(x) x$path))
+
+# Example with a unit not present
+archive_content_missing <- prepare_eoi(mock_processed_data, uos = "PHYS1001")
+print(length(archive_content_missing)) # Expected: 0
+}
 }

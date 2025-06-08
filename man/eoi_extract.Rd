@@ -24,15 +24,18 @@ can be a comma-separated string of unit codes.
 }
 \examples{
 \dontrun{
-# mock_data <- data.frame(
-#   surname = c("Smith", "Doe", "King"),
-#   preferred_units = c("INFO1111, COMP2222", "INFO1111, DATA3333, ", NA_character_),
-#   stringsAsFactors = FALSE
-# )
-# eoi_extract(mock_data)
-# # Expected: c("INFO1111", "COMP2222", "DATA3333", "", NA) or similar order
+mock_data <- data.frame(
+  surname = c("Smith", "Doe", "King"),
+  preferred_units = c("INFO1111, COMP2222", "INFO1111, DATA3333, ", NA_character_),
+  stringsAsFactors = FALSE
+)
+eoi_extract(mock_data)
+# Expected: c("INFO1111", "COMP2222", "DATA3333", "", NA) or similar order
 
-# mock_data_empty <- data.frame(surname="Solo", preferred_units=character(0))
-# eoi_extract(mock_data_empty) # Expected: NULL
+mock_data_empty_col <- data.frame(surname = "Solo", preferred_units = character(0))
+eoi_extract(mock_data_empty_col) # Expected: NULL
+
+mock_data_no_col <- data.frame(surname = "NoUnitsField")
+# eoi_extract(mock_data_no_col) # This would error, as expected.
 }
 }
