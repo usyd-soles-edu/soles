@@ -13,8 +13,8 @@ corresponding to EOI form fields (e.g., \code{given_name}, \code{surname},
 \code{preferred_units}, etc.).}
 }
 \value{
-A character string representing the formatted applicant profile.
-The profile is also printed to the console using \code{cat()}.
+A character string representing the formatted applicant profile in Markdown.
+Empty or "N/A" fields are generally omitted.
 }
 \description{
 Generates a formatted string summarizing an applicant's Expression of

@@ -30,4 +30,5 @@ Imports:
     bsicons,
     logger,
     rlang,
-    tibble
+    tibble,
+    quarto

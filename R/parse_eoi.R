@@ -569,8 +569,8 @@ process_eoi_data <- function(df, unit_list) {
 #'   the EOI data for one applicant. Expected to have specific named elements
 #'   corresponding to EOI form fields (e.g., `given_name`, `surname`,
 #'   `preferred_units`, etc.).
-#' @return A character string representing the formatted applicant profile.
-#'   The profile is also printed to the console using `cat()`.
+#' @return A character string representing the formatted applicant profile in Markdown.
+#'   Empty or "N/A" fields are generally omitted.
 #' @export
 #' @examples
 #' \dontrun{
@@ -603,12 +603,11 @@ process_eoi_data <- function(df, unit_list) {
 #' # cat(profile_string_df)
 #' }
 create_eoi_profile <- function(applicant_data) {
-  # Ensure applicant_data is a list-like structure (list or single-row data frame)
+  # Ensure applicant_data is a list-like structure
   if (is.data.frame(applicant_data)) {
     if (nrow(applicant_data) != 1) {
       stop("If applicant_data is a data frame, it must contain only one row.")
     }
-    # Convert single-row data frame to a list for consistent access
     ad <- as.list(applicant_data)
   } else if (is.list(applicant_data)) {
     ad <- applicant_data
@@ -617,46 +616,257 @@ create_eoi_profile <- function(applicant_data) {
   }
 
   # Helper to safely get values, using .get_val_or_default
-  # This ensures that if a field is missing entirely from `ad`, it doesn't error out
-  # but instead .get_val_or_default handles `NULL` input from `ad$non_existent_field`.
-  # .get_val_or_default is designed for scalar inputs, so `ad[[field_name]]` is preferred
-  # over `ad$field_name` if `ad` could have multiple elements with the same name (not typical for EOI).
-  # However, `ad$field_name` is more idiomatic for lists where names are unique.
-  # We assume unique names from EOI data.
-  get_val <- function(field_name, default = "N/A") {
-    val <- ad[[field_name]] # Use [[ to get NULL if not present, not error
-    .get_val_or_default(val, default)
+  get_val <- function(field_name, default_val = "N/A") {
+    val <- ad[[field_name]]
+    .get_val_or_default(val, default_val)
   }
 
-  profile <- paste0(
-    "# Applicant Profile\n\n",
-    "## Personal Details\n",
-    sprintf("- **Name:** %s %s %s\n", get_val("title"), get_val("given_name"), get_val("surname")),
-    sprintf("- **USYD Staff:** %s (ID: %s)\n", get_val("worked_at_usyd"), get_val("staff_id", "Not Provided")),
-    sprintf("- **Email:** %s\n", get_val("preferred_email")),
-    sprintf("- **Contact:** %s\n", get_val("preferred_contact")),
-    sprintf("- **PhD Conferred:** %s\n\n", get_val("phd_conferred")),
-    "## Teaching Experience & Preferences\n",
-    sprintf("- **Previous SOLES Demonstrator:** %s\n", get_val("previous_demonstrator")),
-    sprintf("- **Previous Units Taught:** %s\n", get_val("previous_units")),
-    sprintf("- **Preferred Units for Consideration:** %s\n", get_val("preferred_units")),
-    sprintf("- **Desired Hours per Week:** %s\n\n", get_val("desired_hours_per_week")),
-    "## Availability\n",
-    sprintf("- **Monday:** %s\n", get_val("availability_monday")),
-    sprintf("- **Tuesday:** %s\n", get_val("availability_tuesday")),
-    sprintf("- **Wednesday:** %s\n", get_val("availability_wednesday")),
-    sprintf("- **Thursday:** %s\n", get_val("availability_thursday")),
-    sprintf("- **Friday:** %s\n", get_val("availability_friday")),
-    sprintf("- **Blockout Dates:** %s\n\n", get_val("blockout_dates")),
-    "## Additional Information\n",
-    sprintf("- **Completed Faculty Training:** %s\n", get_val("completed_training")),
-    sprintf("- **Interest in Lead Demonstrator Role:** %s\n", get_val("lead_demonstrator_interest")),
-    sprintf("  - **Details (if other):** %s\n", get_val("lead_demonstrator_other", "N/A or not specified")),
-    sprintf("- **Area(s) of Expertise:** %s\n", get_val("expertise_area")),
-    sprintf("- **Higher Education Degrees & Majors:** %s\n", get_val("higher_education_degrees")),
-    sprintf("- **Teaching Philosophy:** %s\n", get_val("teaching_philosophy")),
-    sprintf("- **How Experience Benefits School:** %s\n", get_val("experience_benefit"))
-  )
-  cat(profile, "\n") # Print the profile to console
-  return(invisible(profile))
+  # Helper function to map availability text to AM/PM symbols or text
+  map_availability_to_symbols <- function(avail_text) {
+    norm_text <- tolower(trimws(avail_text))
+
+    # Handle clear "unavailable" cases first
+    if (norm_text %in% c("", "n/a", "not available", "unavailable") ||
+      grepl("unavailable", norm_text, fixed = TRUE)) {
+      return(list(am = "x", pm = "x"))
+    }
+
+    is_full_day <- norm_text == "full day"
+    has_am_mention <- grepl("am|morning", norm_text)
+    has_pm_mention <- grepl("pm|afternoon", norm_text)
+
+    # Initialize symbols assuming not available, then prove availability
+    am_symbol <- "x"
+    pm_symbol <- "x"
+
+    if (is_full_day || (has_am_mention && has_pm_mention)) {
+      # Covers "full day" or cases like "AM and PM", "Morning, Afternoon"
+      am_symbol <- "✓"
+      pm_symbol <- "✓"
+    } else if (has_am_mention) {
+      # AM mentioned, and not PM (because previous condition was false)
+      am_symbol <- "✓"
+      # pm_symbol remains "x"
+    } else if (has_pm_mention) {
+      # PM mentioned, and not AM (because previous conditions were false)
+      # am_symbol remains "x"
+      pm_symbol <- "✓"
+    } else {
+      # Not explicitly unavailable, not full day, no clear AM/PM only.
+      # This is for other non-empty strings like "flexible", "by appointment".
+      return(list(am = "?", pm = "?"))
+    }
+
+    return(list(am = am_symbol, pm = pm_symbol))
+  }
+
+  # Helper to format multi-line text for table cells (escape pipes, then replace newline with <br>)
+  format_for_table_cell <- function(text) {
+    if (text == "N/A") {
+      return("")
+    }
+    if (!is.character(text)) text <- as.character(text)
+    # Order of escaping matters:
+    # 1. Escape backslashes first to prevent them from interfering with subsequent escapes
+    text <- gsub("\\\\", "\\\\\\\\", text) # Replace \ with \\
+    # 2. Escape pipe characters
+    text <- gsub("\\|", "\\\\|", text) # Replace | with \|
+    # 3. Replace newlines with <br> for HTML display in Markdown tables
+    text <- gsub("\n", "<br>", text)
+    return(text)
+  }
+
+  profile_parts <- c()
+
+  # 1. Applicant Name (H1)
+  title_val <- get_val("title")
+  given_name_val <- get_val("given_name")
+  surname_val <- get_val("surname")
+
+  name_parts_vec <- c()
+  if (title_val != "N/A") name_parts_vec <- c(name_parts_vec, title_val)
+  if (given_name_val != "N/A") name_parts_vec <- c(name_parts_vec, given_name_val)
+  if (surname_val != "N/A") name_parts_vec <- c(name_parts_vec, surname_val)
+
+  if (length(name_parts_vec) > 0) {
+    profile_parts <- c(profile_parts, paste0("# ", paste(name_parts_vec, collapse = " "), "\n\n"))
+  } else {
+    profile_parts <- c(profile_parts, "# Applicant Profile\n\n") # Fallback
+  }
+
+  # 2. Key Information Table
+  key_info_rows <- c()
+
+  email_val <- get_val("preferred_email")
+  if (email_val != "N/A") {
+    key_info_rows <- c(key_info_rows, sprintf("|**Email**|%s|", email_val))
+  }
+
+  contact_val <- get_val("preferred_contact")
+  if (contact_val != "N/A") {
+    key_info_rows <- c(key_info_rows, sprintf("|**Phone**|%s|", contact_val))
+  }
+
+  worked_usyd_val <- get_val("worked_at_usyd")
+  staff_id_val <- get_val("staff_id")
+  usyd_staff_info <- worked_usyd_val
+  if (tolower(worked_usyd_val) == "yes" && staff_id_val != "N/A") {
+    usyd_staff_info <- sprintf("Yes (ID: %s)", staff_id_val)
+  }
+  if (worked_usyd_val != "N/A") {
+    key_info_rows <- c(key_info_rows, sprintf("|**USYD Staff**|%s|", usyd_staff_info))
+  }
+
+  phd_val <- get_val("phd_conferred")
+  if (phd_val != "N/A") {
+    key_info_rows <- c(key_info_rows, sprintf("|**PhD Conferred**|%s|", phd_val))
+  }
+
+  training_val <- get_val("completed_training")
+  if (training_val != "N/A") {
+    key_info_rows <- c(key_info_rows, sprintf("|**Completed Faculty Training**|%s|", training_val))
+  }
+
+  lead_interest_val <- get_val("lead_demonstrator_interest")
+  lead_other_val <- get_val("lead_demonstrator_other")
+  lead_info <- lead_interest_val
+  if (lead_interest_val != "N/A" && tolower(lead_interest_val) != "no" && lead_other_val != "N/A") {
+    lead_info <- sprintf("%s (Details: %s)", lead_interest_val, lead_other_val)
+  }
+  if (lead_interest_val != "N/A") {
+    key_info_rows <- c(key_info_rows, sprintf("|**Interest in Lead Demonstrator Role**|%s|", lead_info))
+  }
+
+  desired_hours_val <- get_val("desired_hours_per_week")
+  if (desired_hours_val != "N/A") {
+    key_info_rows <- c(key_info_rows, sprintf("|**Desired Hours per Week:**|%s|", desired_hours_val))
+  }
+
+  blockout_val <- get_val("blockout_dates")
+  if (blockout_val != "N/A") {
+    key_info_rows <- c(key_info_rows, sprintf("|**Blockout Dates:**|%s|", blockout_val))
+  }
+
+  if (length(key_info_rows) > 0) {
+    key_info_header <- c(
+      "|Key Information|Details|",
+      "|---|---|"
+    )
+    profile_parts <- c(profile_parts, paste(c(key_info_header, key_info_rows), collapse = "\n"), "\n\n")
+  }
+
+  # 3. Availability Table
+  availability_rows <- c()
+  days <- c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday")
+  day_fields <- paste0("availability_", tolower(days))
+
+  has_availability_info <- FALSE
+  for (i in seq_along(days)) {
+    avail_val_text <- get_val(day_fields[i])
+    # Check if any availability info exists, even if it's "N/A" which will be mapped to 'x'
+    # The goal is to show the table if any day has a non-default (empty) value from source.
+    # get_val returns "N/A" if field is missing or empty.
+    # So, if avail_val_text is ever different from the default "N/A" for a missing field,
+    # or if it's explicitly set, we consider it info.
+    # A simpler check: if any day's value is not the default "N/A" from get_val for a truly absent field.
+    # However, the original data might contain "N/A" as a string.
+    # Let's assume if get_val returns something other than its own default_val for a missing field,
+    # or if the field exists, it's info.
+    # The current get_val returns "N/A" for empty/missing.
+    # So, if any avail_val_text is *ever* populated (even with "N/A" from data), we show table.
+    # This means we always show the table if the fields are expected.
+    # Let's refine: only show table if at least one day has an actual stated availability
+    # (i.e., not just "N/A" from get_val because the field was missing).
+    # The current logic of map_availability_to_symbols will produce 'x' for "N/A".
+    # We need to know if the "N/A" was from actual data or from get_val default.
+    # For simplicity, if any of the availability fields exist in `ad`, we show the table.
+    # A pragmatic approach: if any `ad[[day_field]]` is not NULL.
+    raw_avail_values <- sapply(day_fields, function(field) !is.null(ad[[field]]))
+    if (any(raw_avail_values)) {
+      has_availability_info <- TRUE
+    }
+
+    symbols <- map_availability_to_symbols(avail_val_text) # avail_val_text can be "N/A"
+    availability_rows <- c(availability_rows, sprintf("|%s|%s|%s|", days[i], symbols$am, symbols$pm))
+  }
+
+  if (has_availability_info) {
+    availability_header <- c(
+      "## Availability\n",
+      "|Day|AM (8am - 1pm)|PM (1pm - 6pm)|",
+      "|---|:---:|:---:|"
+    )
+    profile_parts <- c(profile_parts, paste(c(availability_header, availability_rows), collapse = "\n"), "\n\n")
+  }
+
+  # 4. Teaching Experience Table
+  prev_demo_val <- get_val("previous_demonstrator", "")
+  prev_units_val <- get_val("previous_units", "")
+  if (prev_units_val != "") {
+    prev_units_val <- gsub("\n", " ", prev_units_val) # Replace newlines with spaces
+    prev_units_val <- trimws(gsub("\\s+", " ", prev_units_val)) # Replace multiple spaces with single and trim
+  }
+  pref_units_val <- get_val("preferred_units", "")
+
+  if (prev_demo_val != "" || prev_units_val != "" || pref_units_val != "") {
+    teaching_exp_header <- c(
+      "## Teaching Experience\n",
+      "|**Previous SOLES Demonstrator**|**Previous Units Taught**|**Preferred Units for Consideration**|",
+      "|---|---|---|"
+    )
+    teaching_exp_row <- sprintf(
+      "|%s|%s|%s|",
+      prev_demo_val, prev_units_val, pref_units_val
+    )
+    profile_parts <- c(profile_parts, paste(c(teaching_exp_header, teaching_exp_row), collapse = "\n"), "\n\n")
+  }
+
+  # 5. Background Table
+  background_rows <- c()
+
+  expertise_val <- get_val("expertise_area")
+  if (expertise_val != "N/A") {
+    background_rows <- c(background_rows, sprintf("|**Area(s) of Expertise**|%s|", format_for_table_cell(expertise_val)))
+  }
+
+  degrees_val <- get_val("higher_education_degrees")
+  if (degrees_val != "N/A") {
+    background_rows <- c(background_rows, sprintf("|**Higher Education Degrees & Majors**|%s|", format_for_table_cell(degrees_val)))
+  }
+
+  philosophy_val <- get_val("teaching_philosophy")
+  if (philosophy_val != "N/A") {
+    background_rows <- c(background_rows, sprintf("|**Teaching Philosophy**|%s|", format_for_table_cell(philosophy_val)))
+  }
+
+  experience_val <- get_val("experience_benefit")
+  if (experience_val != "N/A") {
+    background_rows <- c(background_rows, sprintf("|**How Experience Benefits School**|%s|", format_for_table_cell(experience_val)))
+  }
+
+  if (length(background_rows) > 0) {
+    background_header <- c(
+      "## Background\n",
+      "|**Additional Information**|**Description**|",
+      "|---|---|"
+    )
+    profile_parts <- c(profile_parts, paste(c(background_header, background_rows), collapse = "\n"), "\n\n")
+  }
+
+  # Combine all parts
+  final_profile_string <- paste(profile_parts, collapse = "")
+
+  # Cleanup multiple newlines:
+  # 1. Reduce sequences of 3 or more newlines to 2 newlines.
+  final_profile_string <- gsub("\n{3,}", "\n\n", final_profile_string)
+
+  # 2. Trim whitespace from the end of the string.
+  final_profile_string <- trimws(final_profile_string, which = "right")
+
+  # 3. Ensure a single trailing newline if the string is not empty.
+  if (nzchar(final_profile_string)) {
+    final_profile_string <- paste0(final_profile_string, "\n")
+  }
+
+  return(final_profile_string)
 }

@@ -414,9 +414,8 @@ server <- function(input, output, session) {
     if (is.character(profile_content)) {
       # Ensure it's a single string first if it's a vector
       profile_string <- paste(profile_content, collapse = "\n")
-      # Escape HTML special characters and then replace newlines with <br>
-      formatted_html <- gsub("\\n", "<br>", htmltools::htmlEscape(profile_string))
-      return(shiny::HTML(formatted_html))
+      # Render markdown to HTML
+      return(shiny::markdown(profile_string))
     } else if (is.null(profile_content)) {
       return(shiny::HTML("<p><em>No profile to display.</em></p>")) # Using HTML entities for <p><em>
     } else {
