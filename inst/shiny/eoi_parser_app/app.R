@@ -35,6 +35,20 @@ ui <- bslib::page_fillable(
         display: inline-block; /* Allows text-align to work as expected */
         width: 100%;
       }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        margin-bottom: 1rem;
+      }
+      th, td {
+        border: 1px solid #dee2e6;
+        padding: 0.75rem;
+        vertical-align: top;
+      }
+      th {
+        background-color: #f8f9fa;
+        font-weight: bold;
+      }
     "))
   ),
   bslib::layout_sidebar(
@@ -545,7 +559,7 @@ server <- function(input, output, session) {
       options = list(scrollX = TRUE, pageLength = 10, autoWidth = TRUE), # As per user request
       rownames = FALSE,
       filter = "top",
-      class = "display nowrap compact table table-striped table-hover", # Added for styling
+      class = "display nowrap compact table table-striped table-hover table-bordered", # Added for styling
       escape = FALSE # Set to FALSE, assuming data doesn't contain malicious HTML or HTML is intended
     )
   }) # End of renderDataTable

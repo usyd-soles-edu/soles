@@ -870,3 +870,184 @@ create_eoi_profile <- function(applicant_data) {
 
   return(final_profile_string)
 }
+
+#' Render EOI Applicant Profile to PDF using Quarto and Typst
+#'
+#' This function takes applicant data, generates a Markdown profile using
+#' \code{\link{create_eoi_profile}}, and then renders this profile to a PDF
+#' document using Quarto with the Typst format. It checks for Quarto's
+#' availability and handles temporary file creation and cleanup.
+#'
+#' @param applicant_data A list or a single-row data frame/tibble containing
+#'   the EOI data for one applicant. This is the same input as required by
+#'   \code{\link{create_eoi_profile}}.
+#' @param output_pdf_path Character string; the desired file path for the
+#'   output PDF document.
+#'
+#' @return Invisibly returns the \code{output_pdf_path} on successful PDF generation.
+#'   Stops with an error if Quarto CLI is not found or if rendering fails.
+#' @export
+#' @importFrom quarto quarto_render quarto_path
+#'
+#' @examples
+#' \dontrun{
+#' if (interactive() &amp;&amp; !is.null(quarto::quarto_path())) {
+#'   mock_applicant_for_pdf <- list(
+#'     given_name = "John", surname = "Smith", title = "Mr",
+#'     preferred_email = "john.smith@example.com",
+#'     preferred_units = "INFO1000, DATA1001",
+#'     availability_monday = "Full Day",
+#'     availability_tuesday = "AM only",
+#'     availability_wednesday = "Not available",
+#'     availability_thursday = "PM only",
+#'     availability_friday = "Full Day",
+#'     expertise_area = "Data Analysis",
+#'     higher_education_degrees = "MSc Data Science"
+#'   )
+#'   temp_pdf_file <- tempfile(fileext = ".pdf")
+#'   render_eoi_profile_to_pdf(mock_applicant_for_pdf, temp_pdf_file)
+#'   if (file.exists(temp_pdf_file)) {
+#'     message("PDF generated: ", temp_pdf_file)
+#'     # To open the PDF (platform dependent):
+#'     # if (Sys.info()["sysname"] == "Darwin") system2("open", temp_pdf_file)
+#'     # if (Sys.info()["sysname"] == "Windows") shell.exec(temp_pdf_file)
+#'     # if (Sys.info()["sysname"] == "Linux") system2("xdg-open", temp_pdf_file)
+#'   }
+#'   unlink(temp_pdf_file) # Clean up
+#'  } else {
+#'   message("Quarto not found or not in interactive session. Skipping PDF example.")
+#'  }
+#' }
+render_eoi_profile_to_pdf <- function(applicant_data, output_pdf_path) {
+  # Check for Quarto CLI
+  quarto_bin <- tryCatch(
+    {
+      quarto::quarto_path()
+    },
+    error = function(e) {
+      NULL
+    }
+  )
+
+  if (is.null(quarto_bin)) {
+    stop("Quarto CLI not found. Please install Quarto (see https://quarto.org/docs/get-started/) ",
+         "and ensure it's in your system's PATH, or that the QUARTO_PATH environment variable is set.")
+  }
+
+  # Get Markdown content from create_eoi_profile
+  markdown_content <- create_eoi_profile(applicant_data)
+
+  # Create a temporary .qmd file
+  temp_qmd_path <- tempfile(fileext = ".qmd")
+  on.exit(unlink(temp_qmd_path, force = TRUE), add = TRUE)
+
+  # Prepare QMD content with Typst format
+  qmd_full_content <- paste0(
+    "---\n",
+    "format: typst\n",
+    "---\n\n",
+    markdown_content
+  )
+
+  # Write to the temporary .qmd file
+  tryCatch(
+    {
+      writeLines(qmd_full_content, temp_qmd_path, useBytes = TRUE)
+    },
+    error = function(e) {
+      stop(paste("Failed to write to temporary QMD file:", temp_qmd_path, "\nError:", e$message))
+    }
+  )
+
+  # Determine target directory and filename
+  target_dir <- dirname(output_pdf_path)
+  target_filename <- basename(output_pdf_path)
+
+  # Ensure target directory exists
+  if (target_dir != "." && !dir.exists(target_dir)) {
+    dir.create(target_dir, recursive = TRUE, showWarnings = FALSE)
+    if (!dir.exists(target_dir)) { # Verify creation
+      stop(paste("Failed to create output directory:", target_dir))
+    }
+  }
+  # Normalize target_dir to be absolute for tempfile's tmpdir argument
+  abs_target_dir <- normalizePath(target_dir, mustWork = TRUE) # mustWork = TRUE now as dir should exist
+
+  # Get Markdown content from create_eoi_profile
+  markdown_content <- create_eoi_profile(applicant_data)
+
+  # Create a temporary .qmd file *inside the target directory*
+  # temp_qmd_path will be an absolute path to a file in abs_target_dir
+  temp_qmd_path <- tempfile(pattern = "eoi_profile_doc_", tmpdir = abs_target_dir, fileext = ".qmd")
+  on.exit(unlink(temp_qmd_path, force = TRUE), add = TRUE)
+
+  # Prepare QMD content with Typst format
+  qmd_full_content <- paste0(
+    "---\n",
+    "format: typst\n",
+    "---\n\n",
+    markdown_content
+  )
+
+  # Write to the temporary .qmd file
+  tryCatch(
+    {
+      writeLines(qmd_full_content, temp_qmd_path, useBytes = TRUE)
+    },
+    error = function(e) {
+      stop(paste("Failed to write to temporary QMD file:", temp_qmd_path, "\nError:", e$message))
+    }
+  )
+
+  # Temporarily change working directory to ensure Quarto outputs correctly.
+  old_wd <- getwd()
+  # This on.exit for setwd(old_wd) is added after the on.exit for unlink() (at line 982).
+  # Due to LIFO, setwd(old_wd) will run BEFORE unlink().
+  on.exit(setwd(old_wd), add = TRUE)
+
+  setwd(abs_target_dir) # Change to target directory for Quarto execution
+
+  # Render the QMD to PDF.
+  render_result <- tryCatch(
+    {
+      quarto::quarto_render(
+        input = basename(temp_qmd_path), # Use basename as we are in temp_qmd_path's directory
+        output_file = target_filename,   # Output is just the filename
+        as_job = FALSE,
+        quiet = FALSE # Keep verbose to see Quarto CLI output
+      )
+      # After quarto_render, we are still in abs_target_dir.
+      # Check if the file was actually created in the current (target) directory.
+      if (!file.exists(target_filename)) {
+          expected_file_location <- file.path(abs_target_dir, target_filename) # For error message clarity
+          stop(paste0("Quarto rendering reported success but output PDF '", target_filename,
+                      "' not found in the target directory: ", abs_target_dir,
+                      ". Full expected path: ", expected_file_location))
+      }
+      TRUE # Indicate success
+    },
+    error = function(e) {
+      # WD is abs_target_dir here. on.exit will restore it to old_wd.
+      err_msg <- paste0(
+        "Failed to render EOI profile to PDF.\n",
+        "Attempted to render in directory: ", abs_target_dir, "\n",
+        "Input QMD (basename used): ", basename(temp_qmd_path), " (full path: ", temp_qmd_path, ")\n",
+        "Target output filename for Quarto: ", target_filename, "\n",
+        "Original full output PDF path: ", output_pdf_path, "\n",
+        "Working directory at time of Quarto call: ", abs_target_dir, "\n",
+        "Quarto CLI Error Details: ", e$message
+      )
+      stop(err_msg, call. = FALSE)
+      FALSE # Indicate failure
+    }
+  )
+  # old_wd is restored by on.exit.
+
+  if (!render_result) {
+    # If rendering failed, on.exit for setwd(old_wd) would have already run or will run.
+    stop("PDF rendering failed. See previous messages for details.")
+  }
+
+  # Invisibly return the original output path on success
+  invisible(output_pdf_path)
+}
