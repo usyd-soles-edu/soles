@@ -694,6 +694,8 @@ create_eoi_profile <- function(applicant_data) {
     profile_parts <- c(profile_parts, "# Applicant Profile\n\n") # Fallback
   }
 
+  prev_demo_val <- get_val("previous_demonstrator", "") # Moved from Teaching Experience section
+
   # 2. Key Information Table
   key_info_rows <- c()
 
@@ -725,6 +727,12 @@ create_eoi_profile <- function(applicant_data) {
   training_val <- get_val("completed_training")
   if (training_val != "N/A") {
     key_info_rows <- c(key_info_rows, sprintf("|**Completed Faculty Training**|%s|", training_val))
+  }
+
+  # Add Previous SOLES Demonstrator to Key Information
+  # prev_demo_val is now fetched before this section
+  if (prev_demo_val != "") {
+    key_info_rows <- c(key_info_rows, sprintf("|**Previous SOLES Demonstrator**|%s|", prev_demo_val))
   }
 
   lead_interest_val <- get_val("lead_demonstrator_interest")
@@ -799,58 +807,108 @@ create_eoi_profile <- function(applicant_data) {
     profile_parts <- c(profile_parts, paste(c(availability_header, availability_rows), collapse = "\n"), "\n\n")
   }
 
-  # 4. Teaching Experience Table
-  prev_demo_val <- get_val("previous_demonstrator", "")
-  prev_units_val <- get_val("previous_units", "")
-  if (prev_units_val != "") {
-    prev_units_val <- gsub("\n", " ", prev_units_val) # Replace newlines with spaces
-    prev_units_val <- trimws(gsub("\\s+", " ", prev_units_val)) # Replace multiple spaces with single and trim
+  # 4. Teaching Experience
+  # prev_demo_val is now fetched earlier, before Key Information section
+  
+  # Process Previous Units Taught
+  prev_units_val_raw <- get_val("previous_units", "")
+  prev_units_display_val <- "" # Initialize as empty
+  if (prev_units_val_raw != "" && prev_units_val_raw != "N/A") {
+    # Only process if it's not empty and not "N/A"
+    processed_val <- gsub("\n", " ", prev_units_val_raw) # Replace newlines with spaces
+    prev_units_display_val <- trimws(gsub("\\s+", " ", processed_val)) # Replace multiple spaces with single and trim
   }
-  pref_units_val <- get_val("preferred_units", "")
+  # prev_units_display_val will be an empty string if raw was "" or "N/A"
 
-  if (prev_demo_val != "" || prev_units_val != "" || pref_units_val != "") {
-    teaching_exp_header <- c(
-      "## Teaching Experience\n",
-      "|**Previous SOLES Demonstrator**|**Previous Units Taught**|**Preferred Units for Consideration**|",
-      "|---|---|---|"
-    )
-    teaching_exp_row <- sprintf(
-      "|%s|%s|%s|",
-      prev_demo_val, prev_units_val, pref_units_val
-    )
-    profile_parts <- c(profile_parts, paste(c(teaching_exp_header, teaching_exp_row), collapse = "\n"), "\n\n")
+  # Process Preferred Units for Consideration
+  pref_units_val_original <- get_val("preferred_units", "")
+  pref_units_md_list <- "" # Will hold the formatted bullet list string e.g., "- Unit A\n- Unit B"
+
+  if (pref_units_val_original != "" && pref_units_val_original != "N/A") {
+    units_list <- strsplit(pref_units_val_original, ",")[[1]]
+    # Create bullet points directly
+    formatted_bullet_points <- sapply(units_list, function(unit) {
+      trimmed_unit <- trimws(unit)
+      if (nzchar(trimmed_unit)) { # Ensure unit is not empty after trimming
+        paste0("- ", trimmed_unit) # Format as a bullet point
+      } else {
+        NULL # Return NULL for empty units to filter them out later
+      }
+    })
+    # Filter out any NULLs that resulted from empty strings after split and trim
+    formatted_bullet_points <- Filter(Negate(is.null), formatted_bullet_points)
+    if (length(formatted_bullet_points) > 0) {
+      pref_units_md_list <- paste(formatted_bullet_points, collapse = "\n")
+    }
   }
 
-  # 5. Background Table
-  background_rows <- c()
+  # Build the teaching experience section content parts
+  teaching_experience_md_parts <- c() # Store individual Markdown strings for each sub-section
 
+  # Add "Previous Units Taught" if content exists
+  if (nzchar(prev_units_display_val)) {
+    teaching_experience_md_parts <- c(teaching_experience_md_parts,
+                                      paste0("**Previous Units Taught**: ", prev_units_display_val))
+  }
+
+  # Add "Preferred Units for Consideration" if content exists
+  if (nzchar(pref_units_md_list)) {
+    # pref_units_md_list is already like "- Unit A\n- Unit B"
+    # The request is: **Header**:\n- Unit A\n- Unit B\n (extra \n after list)
+    preferred_units_block_md <- paste0("**Preferred Units for Consideration**:\n",
+                                       pref_units_md_list,
+                                       "\n") # The extra newline after the list itself
+    teaching_experience_md_parts <- c(teaching_experience_md_parts, preferred_units_block_md)
+  }
+
+  # If there's any content for the "Teaching Experience" section
+  if (length(teaching_experience_md_parts) > 0) {
+    # Join the parts (e.g., "Previous Units..." and "Preferred Units...") with "\n\n"
+    # This creates the body of the "Teaching Experience" section
+    teaching_experience_body_md <- paste(teaching_experience_md_parts, collapse = "\n\n")
+    
+    # Prepend the main section header "## Teaching Experience\n\n"
+    full_section_md <- paste0("## Teaching Experience\n\n", teaching_experience_body_md)
+    
+    # Add the complete section to profile_parts, followed by the standard two newlines
+    # to separate it from the next section.
+    profile_parts <- c(profile_parts, full_section_md, "\n\n")
+  }
+  # The comment "# prev_demo_val is no longer used..." is removed as part of the block replacement.
+
+  # 5. Background Information
+  # This section now uses paragraphs with in-text headers instead of a table.
+
+  # Retrieve all background values first
   expertise_val <- get_val("expertise_area")
-  if (expertise_val != "N/A") {
-    background_rows <- c(background_rows, sprintf("|**Area(s) of Expertise**|%s|", format_for_table_cell(expertise_val)))
-  }
-
   degrees_val <- get_val("higher_education_degrees")
-  if (degrees_val != "N/A") {
-    background_rows <- c(background_rows, sprintf("|**Higher Education Degrees & Majors**|%s|", format_for_table_cell(degrees_val)))
-  }
-
   philosophy_val <- get_val("teaching_philosophy")
-  if (philosophy_val != "N/A") {
-    background_rows <- c(background_rows, sprintf("|**Teaching Philosophy**|%s|", format_for_table_cell(philosophy_val)))
-  }
-
   experience_val <- get_val("experience_benefit")
-  if (experience_val != "N/A") {
-    background_rows <- c(background_rows, sprintf("|**How Experience Benefits School**|%s|", format_for_table_cell(experience_val)))
-  }
 
-  if (length(background_rows) > 0) {
-    background_header <- c(
-      "## Background\n",
-      "|**Additional Information**|**Description**|",
-      "|---|---|"
-    )
-    profile_parts <- c(profile_parts, paste(c(background_header, background_rows), collapse = "\n"), "\n\n")
+  # Check if any background information is available to include the "## Background" header
+  has_any_background_info <- expertise_val != "N/A" ||
+                             degrees_val != "N/A" ||
+                             philosophy_val != "N/A" ||
+                             experience_val != "N/A"
+
+  if (has_any_background_info) {
+    profile_parts <- c(profile_parts, "## Background\n\n")
+
+    if (expertise_val != "N/A") {
+      profile_parts <- c(profile_parts, paste0("**Area(s) of Expertise**: ", expertise_val, "\n\n"))
+    }
+
+    if (degrees_val != "N/A") {
+      profile_parts <- c(profile_parts, paste0("**Higher education degrees and majors**: ", degrees_val, "\n\n"))
+    }
+
+    if (philosophy_val != "N/A") {
+      profile_parts <- c(profile_parts, paste0("**Teaching Philosophy**: ", philosophy_val, "\n\n"))
+    }
+
+    if (experience_val != "N/A") {
+      profile_parts <- c(profile_parts, paste0("**How teaching benefits school**: ", experience_val, "\n\n"))
+    }
   }
 
   # Combine all parts
