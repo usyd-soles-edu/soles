@@ -809,7 +809,7 @@ create_eoi_profile <- function(applicant_data) {
 
   # 4. Teaching Experience
   # prev_demo_val is now fetched earlier, before Key Information section
-  
+
   # Process Previous Units Taught
   prev_units_val_raw <- get_val("previous_units", "")
   prev_units_display_val <- "" # Initialize as empty
@@ -847,17 +847,21 @@ create_eoi_profile <- function(applicant_data) {
 
   # Add "Previous Units Taught" if content exists
   if (nzchar(prev_units_display_val)) {
-    teaching_experience_md_parts <- c(teaching_experience_md_parts,
-                                      paste0("**Previous Units Taught**: ", prev_units_display_val))
+    teaching_experience_md_parts <- c(
+      teaching_experience_md_parts,
+      paste0("**Previous Units Taught**: ", prev_units_display_val)
+    )
   }
 
   # Add "Preferred Units for Consideration" if content exists
   if (nzchar(pref_units_md_list)) {
     # pref_units_md_list is already like "- Unit A\n- Unit B"
     # The request is: **Header**:\n- Unit A\n- Unit B\n (extra \n after list)
-    preferred_units_block_md <- paste0("**Preferred Units for Consideration**:\n",
-                                       pref_units_md_list,
-                                       "\n") # The extra newline after the list itself
+    preferred_units_block_md <- paste0(
+      "**Preferred Units for Consideration**:\n\n",
+      pref_units_md_list,
+      "\n"
+    ) # The extra newline after the list itself
     teaching_experience_md_parts <- c(teaching_experience_md_parts, preferred_units_block_md)
   }
 
@@ -866,10 +870,10 @@ create_eoi_profile <- function(applicant_data) {
     # Join the parts (e.g., "Previous Units..." and "Preferred Units...") with "\n\n"
     # This creates the body of the "Teaching Experience" section
     teaching_experience_body_md <- paste(teaching_experience_md_parts, collapse = "\n\n")
-    
+
     # Prepend the main section header "## Teaching Experience\n\n"
     full_section_md <- paste0("## Teaching Experience\n\n", teaching_experience_body_md)
-    
+
     # Add the complete section to profile_parts, followed by the standard two newlines
     # to separate it from the next section.
     profile_parts <- c(profile_parts, full_section_md, "\n\n")
@@ -887,9 +891,9 @@ create_eoi_profile <- function(applicant_data) {
 
   # Check if any background information is available to include the "## Background" header
   has_any_background_info <- expertise_val != "N/A" ||
-                             degrees_val != "N/A" ||
-                             philosophy_val != "N/A" ||
-                             experience_val != "N/A"
+    degrees_val != "N/A" ||
+    philosophy_val != "N/A" ||
+    experience_val != "N/A"
 
   if (has_any_background_info) {
     profile_parts <- c(profile_parts, "## Background\n\n")
@@ -929,16 +933,18 @@ create_eoi_profile <- function(applicant_data) {
   return(final_profile_string)
 }
 
-#' Render EOI Applicant Profile to PDF using Quarto and Typst
+#' Render EOI Applicant Profiles to a Single PDF with TOC
 #'
-#' This function takes applicant data, generates a Markdown profile using
-#' \code{\link{create_eoi_profile}}, and then renders this profile to a PDF
-#' document using Quarto with the Typst format. It checks for Quarto's
-#' availability and handles temporary file creation and cleanup.
+#' This function takes a data frame of applicant data, generates a Markdown profile
+#' for each applicant using \code{\link{create_eoi_profile}}, concatenates these
+#' profiles with page breaks, and then renders the combined content to a single PDF
+#' document using Quarto with the Typst format. The resulting PDF includes a
+#' table of contents. It checks for Quarto's availability and handles
+#' temporary file creation and cleanup.
 #'
-#' @param applicant_data A list or a single-row data frame/tibble containing
-#'   the EOI data for one applicant. This is the same input as required by
-#'   \code{\link{create_eoi_profile}}.
+#' @param all_applicants_data A data frame where each row represents an applicant.
+#'   Each row should contain the necessary EOI data fields compatible with
+#'   what \code{\link{create_eoi_profile}} expects when processing a single applicant (as a list).
 #' @param output_pdf_path Character string; the desired file path for the
 #'   output PDF document.
 #'
@@ -949,21 +955,24 @@ create_eoi_profile <- function(applicant_data) {
 #'
 #' @examples
 #' \dontrun{
-#' if (interactive() &amp;&amp; !is.null(quarto::quarto_path())) {
-#'   mock_applicant_for_pdf <- list(
-#'     given_name = "John", surname = "Smith", title = "Mr",
-#'     preferred_email = "john.smith@example.com",
-#'     preferred_units = "INFO1000, DATA1001",
-#'     availability_monday = "Full Day",
-#'     availability_tuesday = "AM only",
-#'     availability_wednesday = "Not available",
-#'     availability_thursday = "PM only",
-#'     availability_friday = "Full Day",
-#'     expertise_area = "Data Analysis",
-#'     higher_education_degrees = "MSc Data Science"
+#' if (interactive() && !is.null(quarto::quarto_path())) {
+#'   mock_applicants_df <- data.frame(
+#'     title = c("Mr", "Dr"),
+#'     given_name = c("John", "Jane"),
+#'     surname = c("Smith", "Doe"),
+#'     preferred_email = c("john.smith@example.com", "jane.doe@example.com"),
+#'     preferred_units = c("INFO1000, DATA1001", "COMP2000, COMP2001"),
+#'     availability_monday = c("Full Day", "Not available"),
+#'     availability_tuesday = c("AM only", "Full Day"),
+#'     availability_wednesday = c("Not available", "PM only"),
+#'     availability_thursday = c("PM only", "Not available"),
+#'     availability_friday = c("Full Day", "Full Day"),
+#'     expertise_area = c("Data Analysis", "Machine Learning"),
+#'     higher_education_degrees = c("MSc Data Science", "PhD Computer Science"),
+#'     stringsAsFactors = FALSE
 #'   )
 #'   temp_pdf_file <- tempfile(fileext = ".pdf")
-#'   render_eoi_profile_to_pdf(mock_applicant_for_pdf, temp_pdf_file)
+#'   render_eoi_profile_to_pdf(mock_applicants_df, temp_pdf_file)
 #'   if (file.exists(temp_pdf_file)) {
 #'     message("PDF generated: ", temp_pdf_file)
 #'     # To open the PDF (platform dependent):
@@ -972,11 +981,11 @@ create_eoi_profile <- function(applicant_data) {
 #'     # if (Sys.info()["sysname"] == "Linux") system2("xdg-open", temp_pdf_file)
 #'   }
 #'   unlink(temp_pdf_file) # Clean up
-#'  } else {
+#' } else {
 #'   message("Quarto not found or not in interactive session. Skipping PDF example.")
-#'  }
 #' }
-render_eoi_profile_to_pdf <- function(applicant_data, output_pdf_path) {
+#' }
+render_eoi_profile_to_pdf <- function(all_applicants_data, output_pdf_path) {
   # Check for Quarto CLI
   quarto_bin <- tryCatch(
     {
@@ -988,34 +997,11 @@ render_eoi_profile_to_pdf <- function(applicant_data, output_pdf_path) {
   )
 
   if (is.null(quarto_bin)) {
-    stop("Quarto CLI not found. Please install Quarto (see https://quarto.org/docs/get-started/) ",
-         "and ensure it's in your system's PATH, or that the QUARTO_PATH environment variable is set.")
+    stop(
+      "Quarto CLI not found. Please install Quarto (see https://quarto.org/docs/get-started/) ",
+      "and ensure it's in your system's PATH, or that the QUARTO_PATH environment variable is set."
+    )
   }
-
-  # Get Markdown content from create_eoi_profile
-  markdown_content <- create_eoi_profile(applicant_data)
-
-  # Create a temporary .qmd file
-  temp_qmd_path <- tempfile(fileext = ".qmd")
-  on.exit(unlink(temp_qmd_path, force = TRUE), add = TRUE)
-
-  # Prepare QMD content with Typst format
-  qmd_full_content <- paste0(
-    "---\n",
-    "format: typst\n",
-    "---\n\n",
-    markdown_content
-  )
-
-  # Write to the temporary .qmd file
-  tryCatch(
-    {
-      writeLines(qmd_full_content, temp_qmd_path, useBytes = TRUE)
-    },
-    error = function(e) {
-      stop(paste("Failed to write to temporary QMD file:", temp_qmd_path, "\nError:", e$message))
-    }
-  )
 
   # Determine target directory and filename
   target_dir <- dirname(output_pdf_path)
@@ -1031,20 +1017,43 @@ render_eoi_profile_to_pdf <- function(applicant_data, output_pdf_path) {
   # Normalize target_dir to be absolute for tempfile's tmpdir argument
   abs_target_dir <- normalizePath(target_dir, mustWork = TRUE) # mustWork = TRUE now as dir should exist
 
-  # Get Markdown content from create_eoi_profile
-  markdown_content <- create_eoi_profile(applicant_data)
+  # --- NEW LOGIC FOR MULTIPLE APPLICANTS ---
+  if (!is.data.frame(all_applicants_data)) {
+    stop("'all_applicants_data' must be a data frame.")
+  }
+
+  final_markdown_body <- "" # Initialize
+
+  if (nrow(all_applicants_data) == 0) {
+    warning("No applicant data provided. A PDF with a message 'No applicant data to display.' will be generated.")
+    final_markdown_body <- "No applicant data to display.\n" # Add newline for consistency
+  } else {
+    num_applicants <- nrow(all_applicants_data)
+    markdown_profiles_list <- vector("list", num_applicants) # Pre-allocate list
+
+    for (i in 1:num_applicants) {
+      current_applicant_row_as_list <- as.list(all_applicants_data[i, , drop = FALSE])
+      # create_eoi_profile already adds a trailing \n
+      markdown_profiles_list[[i]] <- create_eoi_profile(current_applicant_row_as_list)
+    }
+    # Join with Typst page breaks.
+    final_markdown_body <- paste(markdown_profiles_list, collapse = "\n{{< pagebreak >}}\n\n")
+  }
+  # --- END OF NEW LOGIC FOR MULTIPLE APPLICANTS ---
 
   # Create a temporary .qmd file *inside the target directory*
-  # temp_qmd_path will be an absolute path to a file in abs_target_dir
   temp_qmd_path <- tempfile(pattern = "eoi_profile_doc_", tmpdir = abs_target_dir, fileext = ".qmd")
   on.exit(unlink(temp_qmd_path, force = TRUE), add = TRUE)
 
-  # Prepare QMD content with Typst format
+  # Prepare QMD content with Typst format and TOC
   qmd_full_content <- paste0(
     "---\n",
     "format: typst\n",
+    "toc: true\n",
+    "toc-depth: 1\n",
     "---\n\n",
-    markdown_content
+    "{{< pagebreak >}}\n\n",
+    final_markdown_body
   )
 
   # Write to the temporary .qmd file
@@ -1059,7 +1068,7 @@ render_eoi_profile_to_pdf <- function(applicant_data, output_pdf_path) {
 
   # Temporarily change working directory to ensure Quarto outputs correctly.
   old_wd <- getwd()
-  # This on.exit for setwd(old_wd) is added after the on.exit for unlink() (at line 982).
+  # This on.exit for setwd(old_wd) is added after the on.exit for unlink().
   # Due to LIFO, setwd(old_wd) will run BEFORE unlink().
   on.exit(setwd(old_wd), add = TRUE)
 
@@ -1070,17 +1079,19 @@ render_eoi_profile_to_pdf <- function(applicant_data, output_pdf_path) {
     {
       quarto::quarto_render(
         input = basename(temp_qmd_path), # Use basename as we are in temp_qmd_path's directory
-        output_file = target_filename,   # Output is just the filename
+        output_file = target_filename, # Output is just the filename
         as_job = FALSE,
         quiet = FALSE # Keep verbose to see Quarto CLI output
       )
       # After quarto_render, we are still in abs_target_dir.
       # Check if the file was actually created in the current (target) directory.
       if (!file.exists(target_filename)) {
-          expected_file_location <- file.path(abs_target_dir, target_filename) # For error message clarity
-          stop(paste0("Quarto rendering reported success but output PDF '", target_filename,
-                      "' not found in the target directory: ", abs_target_dir,
-                      ". Full expected path: ", expected_file_location))
+        expected_file_location <- file.path(abs_target_dir, target_filename) # For error message clarity
+        stop(paste0(
+          "Quarto rendering reported success but output PDF '", target_filename,
+          "' not found in the target directory: ", abs_target_dir,
+          ". Full expected path: ", expected_file_location
+        ))
       }
       TRUE # Indicate success
     },
