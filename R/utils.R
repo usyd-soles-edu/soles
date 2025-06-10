@@ -143,3 +143,52 @@ set_log_level <- function(level) {
     invisible(NULL) # Return NULL or similar indication of failure
   }
 }
+
+#' Check if a Value is Empty or NA
+#'
+#' Internal helper function to determine if a given value is NA or an empty string.
+#' Designed for scalar inputs.
+#'
+#' @param value The value to check.
+#' @return \code{TRUE} if the value is \code{NULL}, \code{NA}, or an empty string (\code{""}), \code{FALSE} otherwise.
+#' @keywords internal
+.is_empty_or_na <- function(value) {
+  if (is.null(value)) { # Check for NULL first
+    return(TRUE)
+  }
+  # Original logic for non-NULL values:
+  if (length(value) != 1) {
+    # This warning can be noisy if called many times with vectors;
+    # for internal use, ensure scalar input or adapt function.
+    # warning(".is_empty_or_na designed for scalar input.")
+    # For robustness with potential vector input from `ad$field` if it's not always scalar:
+    # return(is.na(value) | value == "") # This would be vectorized
+    # However, sticking to original intent for scalar:
+    return(is.na(value[1]) || identical(value[1], ""))
+  }
+  is.na(value) || identical(value, "")
+}
+
+#' Get Value or Default
+#'
+#' Internal helper function to return a value if it's not empty or NA,
+#' otherwise returns a specified default value.
+#' Designed for scalar inputs.
+#'
+#' @param value The value to retrieve.
+#' @param default_val The default value to return if 'value' is empty or NA.
+#'   Defaults to "N/A".
+#' @return The original value, or 'default_val' if the original is empty/NA.
+#' @keywords internal
+.get_val_or_default <- function(value, default_val = "N/A") {
+  if (length(value) != 1) {
+    # warning(".get_val_or_default designed for scalar input.")
+    # Sticking to original intent for scalar:
+    if (.is_empty_or_na(value[1])) {
+      return(default_val)
+    } else {
+      return(value[1])
+    }
+  }
+  if (.is_empty_or_na(value)) default_val else value
+}
