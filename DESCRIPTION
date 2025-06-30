@@ -21,6 +21,8 @@ Imports:
     purrr,
     stringr,
     huxtable,
+    gt,
+    janitor,
     rvest,
     shiny,
     DT,
@@ -31,4 +33,5 @@ Imports:
     logger,
     rlang,
     tibble,
-    quarto
+    quarto,
+    openxlsx2
