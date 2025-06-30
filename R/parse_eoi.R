@@ -238,14 +238,46 @@ eoi_extract <- function(df) {
   preferred_units_col <- df$preferred_units
 
   if (length(preferred_units_col) == 0) {
-    # strsplit(character(0), ",") is list(), unlist is NULL
-    return(unique(unlist(strsplit(preferred_units_col, ",")))) # Returns NULL
+    return(character(0)) # Return empty character vector for empty input
   }
 
-  all_units_list <- unlist(strsplit(preferred_units_col, ","))
-  trimmed_units <- trimws(all_units_list)
+  list_of_unit_vectors <- lapply(preferred_units_col, function(s) {
+    # Handle NA or effectively empty strings
+    if (is.na(s) || trimws(s) == "") {
+      return(character(0))
+    }
 
-  return(unique(trimmed_units))
+    # Split by a comma that is followed by optional whitespace and then a unit code pattern.
+    # The unit code pattern [A-Z]{4}[0-9]{4} is used in a positive lookahead.
+    # Using stringr::str_split for potentially more consistent regex handling.
+    units_after_split <- stringr::str_split(s, pattern = ",\\s*(?=[A-Z]{4}[A-Z0-9]{4})")[[1]]
+
+    # Post-process each extracted string segment
+    final_segments <- vapply(units_after_split, function(segment) {
+      # Step 1: Trim whitespace
+      trimmed_once <- trimws(segment)
+      # Step 2: Remove a potential trailing comma that was a separator but not handled by split
+      # (e.g. if the string was "UNIT1 Name," - the comma is part of the segment)
+      no_trailing_comma <- sub(",$", "", trimmed_once)
+      # Step 3: Trim again to clean up (e.g. if "name , " became "name " after sub)
+      fully_cleaned <- trimws(no_trailing_comma)
+      return(fully_cleaned)
+    }, FUN.VALUE = character(1))
+
+    # Filter out any segments that became empty after cleaning
+    final_segments <- final_segments[final_segments != ""]
+
+    return(final_segments)
+  })
+
+  # Unlist to get a single character vector of all units
+  all_extracted_units <- unlist(list_of_unit_vectors)
+
+  # Safeguard: Remove any NAs that might have crept in (though current logic should prevent them)
+  all_extracted_units <- all_extracted_units[!is.na(all_extracted_units)]
+
+  # Return unique units
+  return(unique(all_extracted_units))
 }
 
 
