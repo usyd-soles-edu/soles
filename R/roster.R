@@ -108,7 +108,7 @@ parse_roster <- function(path,
     dplyr::left_join(staff, by = c("name" = "staff_label")) %>%
     dplyr::relocate(name, full_name, phd, role, rate, session)
 
-  compare_rosters(ota_draft)
+  compare_rosters(ota_draft, log_dir = file.path(dirname(path), "logs"))
 
   return(ota_draft)
 }
