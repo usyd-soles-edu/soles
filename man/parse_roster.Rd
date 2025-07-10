@@ -2,13 +2,13 @@
 % Please edit documentation in R/roster.R
 \name{parse_roster}
 \alias{parse_roster}
-\title{Parse a roster from an Excel file}
+\title{Parse a template from an Excel file}
 \usage{
 parse_roster(
   path,
-  roster_sheet = 1,
+  ota_template_sheet = 1,
   staff_sheet = "staff",
-  roster_skip = 4,
+  ota_template_skip = 4,
   id_cols = c("week", "practical"),
   role_prefix_map = c(`^sup` = "Tutor", `^demo` = "Demonstrator")
 )
@@ -16,11 +16,11 @@ parse_roster(
 \arguments{
 \item{path}{Path to the Excel file.}
 
-\item{roster_sheet}{Name or index of the sheet containing the roster data.}
+\item{ota_template_sheet}{Name or index of the sheet containing the template data.}
 
 \item{staff_sheet}{Name or index of the sheet containing the staff data.}
 
-\item{roster_skip}{Number of rows to skip when reading the roster sheet.}
+\item{ota_template_skip}{Number of rows to skip when reading the template sheet.}
 
 \item{id_cols}{A character vector of column names to fill downwards.}
 

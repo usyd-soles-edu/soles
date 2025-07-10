@@ -17,43 +17,47 @@ assign_rates <- function(data) {
     )
 }
 
-#' Parse a roster from an Excel file
+#' Parse a template from an Excel file
 #'
 #' This function reads roster and staff data from an Excel file, processes it,
 #' and returns a cleaned and summarised data frame.
 #'
 #' @param path Path to the Excel file.
-#' @param roster_sheet Name or index of the sheet containing the roster data.
+#' @param ota_template_sheet Name or index of the sheet containing the template data.
 #' @param staff_sheet Name or index of the sheet containing the staff data.
-#' @param roster_skip Number of rows to skip when reading the roster sheet.
+#' @param ota_template_skip Number of rows to skip when reading the template sheet.
 #' @param id_cols A character vector of column names to fill downwards.
 #' @param role_prefix_map A named character vector mapping column prefixes to roles.
 #' @return A processed data frame.
 #' @export
 parse_roster <- function(path,
-                         roster_sheet = 1,
+                         ota_template_sheet = 1,
                          staff_sheet = "staff",
-                         roster_skip = 4,
+                         ota_template_skip = 4,
                          id_cols = c("week", "practical"),
                          role_prefix_map = c("^sup" = "Tutor", "^demo" = "Demonstrator")) {
-  roster_raw <- readxl::read_excel(path, sheet = roster_sheet, skip = roster_skip) %>%
-    janitor::clean_names()
+  ota_template_raw <- readxl::read_excel(path, sheet = ota_template_sheet, skip = ota_template_skip) %>%
+    janitor::clean_names() %>%
+    # convert data that is "." to NA
+    dplyr::mutate(
+      dplyr::across(-c(1:4), ~ ifelse(. == ".", NA_character_, .))
+    )
   staff <- readxl::read_excel(path, sheet = staff_sheet) %>%
     janitor::clean_names() %>%
     dplyr::rename(phd = ph_d)
 
-  message("Successfully imported roster and staff data.")
+  message("Successfully imported template and staff data.")
 
-  if (!all(id_cols %in% names(roster_raw))) {
-    stop("One or more ID columns are missing from the imported roster.")
+  if (!all(id_cols %in% names(ota_template_raw))) {
+    stop("One or more ID columns are missing from the imported template.")
   }
 
-  roster <- roster_raw %>%
+  template <- ota_template_raw %>%
     tidyr::fill(dplyr::all_of(id_cols), .direction = "down")
 
   role_pattern <- paste(names(role_prefix_map), collapse = "|")
 
-  counts_wide <- roster %>%
+  counts_wide <- template %>%
     tidyr::pivot_longer(
       cols = dplyr::matches(role_pattern),
       names_to = "role_col",
@@ -69,7 +73,7 @@ parse_roster <- function(path,
         return(NA_character_)
       })
     ) %>%
-    dplyr::filter(!is.na(name)) %>%
+    dplyr::filter(!is.na(name) & name != "." & !grepl("exam|semester|stuvac", name, ignore.case = TRUE)) %>%
     dplyr::arrange(name, week, practical, date, session) %>%
     dplyr::group_by(name, week) %>%
     dplyr::mutate(
@@ -104,43 +108,49 @@ parse_roster <- function(path,
   non_week_cols <- setdiff(names(counts_wide), wk_names_sorted)
   counts_wide <- counts_wide[, c(non_week_cols, wk_names_sorted)]
 
+  counts_wide <- counts_wide %>%
+    dplyr::mutate(dplyr::across(dplyr::all_of(wk_names_sorted), ~ .x * 3))
+
   ota_draft <- counts_wide %>%
     dplyr::left_join(staff, by = c("name" = "staff_label")) %>%
     dplyr::relocate(name, full_name, phd, role, rate, session)
 
-  compare_rosters(ota_draft, log_dir = file.path(dirname(path), "logs"))
+  ota_draft <- ota_draft %>%
+    dplyr::mutate(dplyr::across(where(is.numeric), ~ tidyr::replace_na(., 0)))
+
+  compare_ota_templates(ota_draft, source_file_path = path, log_dir = file.path(dirname(path), "log"))
 
   return(ota_draft)
 }
 
 
-#' Prepare a roster dataframe for comparison
+#' Prepare a template dataframe for comparison
 #'
 #' @param df A data frame.
 #' @return A data frame prepared for comparison.
-prepare_roster_for_comparison <- function(df) {
+prepare_for_comparison <- function(df) {
   df <- dplyr::mutate_all(df, as.character)
   df <- df[, stringr::str_sort(names(df), numeric = TRUE), drop = FALSE]
   df <- dplyr::arrange(df, dplyr::across(dplyr::everything()))
   return(df)
 }
 
-#' Check if two rosters are identical
+#' Check if two templates are identical
 #'
-#' @param roster A roster data frame.
-#' @param roster2 Another roster data frame.
-#' @return A logical value indicating if the rosters are identical.
+#' @param template A template data frame.
+#' @param template2 Another template data frame.
+#' @return A logical value indicating if the templates are identical.
 #' @export
-check_equal_roster <- function(roster, roster2) {
-  df1 <- prepare_roster_for_comparison(roster)
-  df2 <- prepare_roster_for_comparison(roster2)
+check_equal_templates <- function(template, template2) {
+  df1 <- prepare_for_comparison(template)
+  df2 <- prepare_for_comparison(template2)
   identical(as.data.frame(df1), as.data.frame(df2))
 }
 
-#' Plot differences between two rosters
+#' Plot differences between two templates
 #'
-#' @param before The old roster data frame.
-#' @param after The new roster data frame.
+#' @param before The old template data frame.
+#' @param after The new template data frame.
 #' @param key_cols A character vector of key column names for joining.
 #' @return A gt table object (invisibly).
 #' @export
@@ -152,8 +162,8 @@ plot_differences <- function(before, after) {
     stop("Please install dplyr, tidyr, gt, and stringr packages.")
   }
 
-  if (check_equal_roster(before, after)) {
-    cat("The rosters are identical.\n")
+  if (check_equal_templates(before, after)) {
+    cat("The templates are identical.\n")
     return(invisible(NULL))
   }
 
@@ -237,14 +247,14 @@ plot_differences <- function(before, after) {
   n_deleted <- if ("Deleted" %in% names(change_summary)) change_summary$Deleted else 0
   n_modified <- if ("Modified" %in% names(change_summary)) change_summary$Modified else 0
 
-  cat("Roster comparison found:", n_modified, "modified,", n_added, "added, and", n_deleted, "deleted rows.\n\n")
+  cat("OTA template comparison found:", n_modified, "modified,", n_added, "added, and", n_deleted, "deleted rows.\n\n")
 
   display_df <- display_df %>%
     dplyr::arrange(factor(status, levels = c("Added", "Modified", "Deleted"))) %>%
     dplyr::group_by(status)
 
   gt_tbl <- gt::gt(display_df) %>%
-    gt::tab_header(title = "Roster Changes") %>%
+    gt::tab_header(title = "OTA Template Changes") %>%
     gt::tab_options(
       table.width = "90%",
       row_group.as_column = TRUE,
@@ -277,13 +287,14 @@ plot_differences <- function(before, after) {
   return(invisible(gt_tbl))
 }
 
-#' Compare a new roster with the latest logged roster
+#' Compare a new template with the latest logged template
 #'
-#' @param new_roster The new roster data frame.
+#' @param new_template The new template data frame.
 #' @param key_cols A character vector of key column names for joining.
-#' @param log_dir The directory where roster logs are stored.
+#' @param log_dir The directory where template logs are stored.
+#' @param source_file_path The path to the source Excel file, used for log file naming.
 #' @export
-compare_rosters <- function(new_roster, log_dir = "log/") {
+compare_ota_templates <- function(new_template, source_file_path, log_dir = "log/") {
   if (!requireNamespace("openxlsx2", quietly = TRUE)) {
     stop("Please install the 'openxlsx2' package to write Excel files.")
   }
@@ -291,27 +302,29 @@ compare_rosters <- function(new_roster, log_dir = "log/") {
     dir.create(log_dir, recursive = TRUE)
   }
 
-  log_files <- list.files(log_dir, pattern = "^roster_\\d{8}_\\d{6}\\.xlsx$", full.names = TRUE)
+  log_file_basename <- tools::file_path_sans_ext(basename(source_file_path))
+  log_file_pattern <- paste0("^", log_file_basename, "_ota_template_\\d{8}_\\d{6}\\.xlsx$")
+  log_files <- list.files(log_dir, pattern = log_file_pattern, full.names = TRUE)
 
   if (length(log_files) == 0) {
-    message("This is the first run. Saving new roster.")
+    message("This is the first run for this source file. Saving new template.")
     ts <- format(Sys.time(), "%Y%m%d_%H%M%S")
-    output_path <- file.path(log_dir, paste0("roster_", ts, ".xlsx"))
-    openxlsx2::write_xlsx(new_roster, output_path)
-    message("New roster saved to ", output_path)
+    output_path <- file.path(log_dir, paste0(log_file_basename, "_ota_template_", ts, ".xlsx"))
+    openxlsx2::write_xlsx(new_template, output_path)
+    message("New template saved to ", output_path)
   } else {
     last_file <- log_files[which.max(file.info(log_files)$mtime)]
-    previous_roster <- readxl::read_excel(last_file)
+    previous_template <- readxl::read_excel(last_file)
 
-    if (check_equal_roster(new_roster, previous_roster)) {
-      message("No changes found in the roster.")
+    if (check_equal_templates(new_template, previous_template)) {
+      message("No changes found in the template.")
     } else {
-      message("Roster has changed. Displaying differences and saving the updated roster.")
-      plot_differences(before = previous_roster, after = new_roster)
+      message("Roster has changed. Displaying differences and saving the updated template.")
+      plot_differences(before = previous_template, after = new_template)
 
       # Determine rows to highlight
-      before <- dplyr::mutate(previous_roster, dplyr::across(dplyr::everything(), as.character))
-      after <- dplyr::mutate(new_roster, dplyr::across(dplyr::everything(), as.character))
+      before <- dplyr::mutate(previous_template, dplyr::across(dplyr::everything(), as.character))
+      after <- dplyr::mutate(new_template, dplyr::across(dplyr::everything(), as.character))
 
       all_names <- union(names(before), names(after))
       week_cols <- stringr::str_sort(stringr::str_subset(all_names, "^w\\d+"), numeric = TRUE)
@@ -341,25 +354,25 @@ compare_rosters <- function(new_roster, log_dir = "log/") {
 
       highlight_indices <- c()
       if (nrow(changed_rows_for_highlight) > 0) {
-        new_roster_indexed <- new_roster %>%
+        new_template_indexed <- new_template %>%
           dplyr::mutate(..row_index = dplyr::row_number()) %>%
           dplyr::mutate(dplyr::across(dplyr::all_of(key_cols), as.character))
 
         changed_keys <- changed_rows_for_highlight %>% dplyr::select(dplyr::all_of(key_cols))
-        highlight_data <- dplyr::inner_join(new_roster_indexed, changed_keys, by = key_cols)
+        highlight_data <- dplyr::inner_join(new_template_indexed, changed_keys, by = key_cols)
         highlight_indices <- highlight_data$..row_index
       }
 
       # Create and save styled Excel file
       ts <- format(Sys.time(), "%Y%m%d_%H%M%S")
-      output_path <- file.path(log_dir, paste0("roster_", ts, ".xlsx"))
+      output_path <- file.path(log_dir, paste0(log_file_basename, "_ota_template_", ts, ".xlsx"))
 
       wb <- openxlsx2::wb_workbook()
       wb <- openxlsx2::wb_add_worksheet(wb, "Roster")
-      wb <- openxlsx2::wb_add_data(wb, "Roster", new_roster)
+      wb <- openxlsx2::wb_add_data(wb, "Roster", new_template)
 
       if (length(highlight_indices) > 0) {
-        dims_to_highlight <- openxlsx2::wb_dims(rows = highlight_indices + 1, cols = 1:ncol(new_roster))
+        dims_to_highlight <- openxlsx2::wb_dims(rows = highlight_indices + 1, cols = 1:ncol(new_template))
         wb <- openxlsx2::wb_add_fill(
           wb,
           sheet = "Roster",
@@ -369,7 +382,7 @@ compare_rosters <- function(new_roster, log_dir = "log/") {
       }
 
       openxlsx2::wb_save(wb, output_path, overwrite = TRUE)
-      message("New roster saved to ", output_path)
+      message("New template saved to ", output_path)
     }
   }
 }

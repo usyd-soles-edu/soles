@@ -2,14 +2,14 @@
 % Please edit documentation in R/roster.R
 \name{plot_differences}
 \alias{plot_differences}
-\title{Plot differences between two rosters}
+\title{Plot differences between two templates}
 \usage{
 plot_differences(before, after)
 }
 \arguments{
-\item{before}{The old roster data frame.}
+\item{before}{The old template data frame.}
 
-\item{after}{The new roster data frame.}
+\item{after}{The new template data frame.}
 
 \item{key_cols}{A character vector of key column names for joining.}
 }
@@ -17,5 +17,5 @@ plot_differences(before, after)
 A gt table object (invisibly).
 }
 \description{
-Plot differences between two rosters
+Plot differences between two templates
 }
