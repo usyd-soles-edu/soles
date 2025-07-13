@@ -1,3 +1,12 @@
+#' Load and process a roster file for a specific unit
+#'
+#' This function loads a roster Excel file and processes it according to the unit specified.
+#' Currently, only BIOL1007 is supported.
+#'
+#' @param path Path to the Excel roster file.
+#' @param unit Character string specifying the unit (e.g., "BIOL1007").
+#' @return A processed data frame with staff allocation counts per week and session.
+#' @export
 load_roster <- function(path, unit) {
   if (unit == "BIOL1007") {
     out <- roster_is_BIOL1007(path)
@@ -7,6 +16,19 @@ load_roster <- function(path, unit) {
   out
 }
 
+#' Process BIOL1007 roster Excel file into detailed staff allocation counts
+#'
+#' Reads and cleans the BIOL1007 roster, staff, and timetable sheets, merges them, and produces a summary
+#' of staff allocations per week, session, and role.
+#'
+#' @param path Path to the Excel roster file.
+#' @return A data frame summarizing staff allocations by week, role, and session.
+#' @importFrom readxl read_excel
+#' @importFrom janitor clean_names
+#' @importFrom dplyr mutate across filter left_join select group_by ungroup count recode
+#' @importFrom tidyr fill pivot_longer extract drop_na pivot_wider
+#' @importFrom stringr str_extract
+#' @export
 roster_is_BIOL1007 <- function(path) {
   # Read the roster file and clean it
   suppressMessages({
