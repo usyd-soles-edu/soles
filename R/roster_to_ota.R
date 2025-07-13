@@ -57,8 +57,7 @@ roster_is_biol1007 <- function(path) {
           "%02d:00",
           ifelse(start_hour < 8, start_hour + 12, start_hour)
         )
-      ) |>
-      drop_na(name)
+      )
   })
 
   # Read the staff file and clean it
@@ -151,7 +150,8 @@ process_paycodes <- function(data) {
     ungroup() |>
     mutate(activity = "Practical") |>
     select(subject_code, short_code, part_location, day_of_week, start_time, activity, role, total_hours, fullname, phd, paycode, everything()) |>
-    arrange(fullname, day_of_week, start_time)
+    arrange(fullname, day_of_week, start_time) |>
+    filter(fullname != "NA NA") # Remove rows with NA names
 
   out
 }
