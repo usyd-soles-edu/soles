@@ -38,6 +38,7 @@ roster_is_biol1007 <- function(path) {
       mutate(across(-c(1:4), ~ replace(., . == ".", NA_character_))) |>
       fill(c(week, practical), .direction = "down") |>
       filter(!is.na(date)) |>
+      mutate(week = sprintf("w%02d", as.numeric(week))) |>
       pivot_longer(
         cols = -c(1:4),
         names_to = "role_lab",
@@ -113,8 +114,8 @@ roster_is_biol1007 <- function(path) {
 #' @export
 process_paycodes <- function(data) {
   # Define and sort week columns
-  week_cols <- names(data)[grepl("^\\d+$", names(data))]
-  week_cols_sorted <- week_cols[order(as.numeric(week_cols))]
+  week_cols <- names(data)[grepl("^w\\d{2}$", names(data))]
+  week_cols_sorted <- week_cols[order(as.numeric(sub("w", "", week_cols)))]
 
   # Define day order
   day_order <- c("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
@@ -150,7 +151,7 @@ process_paycodes <- function(data) {
     ungroup() |>
     mutate(activity = "Practical") |>
     select(subject_code, short_code, part_location, day_of_week, start_time, activity, role, total_hours, fullname, phd, paycode, everything()) |>
-    arrange(fullname, day_of_week, start_time) |>
+    arrange(subject_code, fullname, day_of_week, start_time) |>
     filter(fullname != "NA NA") # Remove rows with NA names
 
   out
