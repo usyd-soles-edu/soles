@@ -14,6 +14,7 @@ load_roster <- function(path, unit) {
   } else {
     stop("Unit not supported")
   }
+  attr(out, "source_file") <- path
   out
 }
 
@@ -154,5 +155,42 @@ process_paycodes <- function(data) {
     arrange(subject_code, fullname, day_of_week, start_time) |>
     filter(fullname != "NA NA") # Remove rows with NA names
 
+  attr(out, "source_file") <- attr(data, "source_file")
   out
+}
+
+#' Log OTA output to an Excel file
+#'
+#' Saves the processed OTA data frame to an Excel file, with options for custom
+#' filenames and logging directories. The original source file path is retrieved
+#' from the data's attributes.
+#'
+#' @param data A data frame, expected to have a "source_file" attribute.
+#' @param log_dir The directory where the log file will be saved. Defaults to "logs".
+#' @param filename The name of the output file. If NULL, a name is generated
+#'   based on the timestamp and the original roster filename.
+#' @return The input data frame, invisibly.
+#' @export
+#' @importFrom openxlsx2 write_xlsx
+log_ota_output <- function(data, log_dir = "logs", filename = NULL) {
+  roster_path <- attr(data, "source_file")
+  if (is.null(roster_path)) {
+    stop("The 'source_file' attribute is missing from the data.")
+  }
+
+  if (is.null(filename)) {
+    timestamp <- format(Sys.time(), "%Y-%m-%d_%H%M%S")
+    basename <- tools::file_path_sans_ext(basename(roster_path))
+    filename <- paste0(timestamp, "_", basename, "_ota_draft.xlsx")
+  }
+
+  if (!dir.exists(log_dir)) {
+    dir.create(log_dir, recursive = TRUE)
+  }
+
+  output_path <- file.path(log_dir, filename)
+  openxlsx2::write_xlsx(data, file = output_path)
+
+  message("OTA draft saved to: ", output_path)
+  invisible(data)
 }
