@@ -5,9 +5,17 @@
 #'
 #' @param path Path to the Excel roster file.
 #' @param unit Character string specifying the unit (e.g., "BIOL1007").
+#' @param verbose If `TRUE`, print verbose output. If `NULL` (default), the global log level is unchanged.
 #' @return A processed data frame with staff allocation counts per week and session.
+#' @importFrom logger log_info
+#' @importFrom glue glue
 #' @export
-load_roster <- function(path, unit) {
+load_roster <- function(path, unit, verbose = NULL) {
+  if (!is.null(verbose)) {
+    set_log_level(verbose)
+  }
+  log_info(glue::glue("Loading roster for {unit} from '{path}'..."))
+
   unit <- toupper(unit) # Ensure unit is in uppercase for consistency
   if (unit == "BIOL1007") {
     out <- roster_is_biol1007(path)
@@ -32,6 +40,7 @@ load_roster <- function(path, unit) {
 #' @importFrom stringr str_extract
 #' @export
 roster_is_biol1007 <- function(path) {
+  log_info("Processing BIOL1007 roster...")
   # Read the roster file and clean it
   suppressMessages({
     roster <- read_excel(path, skip = 4) |>
@@ -61,10 +70,12 @@ roster_is_biol1007 <- function(path) {
         )
       )
   })
+  log_info(glue::glue("Read {nrow(roster)} rows from the roster sheet."))
 
   # Read the staff file and clean it
   staff <- read_excel(path, sheet = 2) |>
     clean_names()
+  log_info(glue::glue("Read {nrow(staff)} rows from the staff sheet."))
 
   # Read the timetable file and clean it
   tt <- read_excel(path, sheet = "details", skip = 8) |>
@@ -72,6 +83,7 @@ roster_is_biol1007 <- function(path) {
     mutate(
       lab = str_extract(part_location, "\\d{3}(?=\\D*$)")
     )
+  log_info(glue::glue("Read {nrow(tt)} rows from the timetable sheet."))
 
   # Join the roster with the timetable
   roster_detailed <- roster |>
@@ -82,9 +94,11 @@ roster_is_biol1007 <- function(path) {
       role = recode(role, demo = "Demonstrator", sup = "Tutor")
     ) |>
     select(-c(practical, surname, given_name, start_hour, role_lab, lab, new))
+  log_info(glue::glue("Identified {length(unique(roster_detailed$fullname))} unique staff members."))
 
   # Get all unique weeks
   all_weeks <- sort(unique(roster$week))
+  log_info(glue::glue("Detected {length(all_weeks)} unique weeks."))
 
   counts <- roster_detailed |>
     group_by(fullname, role, day_of_week, start_time, subject_code, short_code, part_location, phd, week, .drop = FALSE) |>
@@ -101,6 +115,7 @@ roster_is_biol1007 <- function(path) {
       values_from = n,
       values_fill = 0
     )
+  log_info(glue::glue("Final counts data frame has {nrow(counts)} rows and {ncol(counts)} columns."))
   counts
 }
 
@@ -114,9 +129,11 @@ roster_is_biol1007 <- function(path) {
 #' @importFrom dplyr mutate across group_by ungroup arrange select case_when row_number
 #' @export
 process_paycodes <- function(data) {
+  log_info("Processing paycodes...")
   # Define and sort week columns
   week_cols <- names(data)[grepl("^w\\d{2}$", names(data))]
   week_cols_sorted <- week_cols[order(as.numeric(sub("w", "", week_cols)))]
+  log_info(glue::glue("Found {length(week_cols_sorted)} week columns."))
 
   # Define day order
   day_order <- c("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
@@ -124,6 +141,9 @@ process_paycodes <- function(data) {
   # Reorder data frame to have sorted week columns
   non_week_cols <- setdiff(names(data), week_cols)
   data <- data[, c(non_week_cols, week_cols_sorted)]
+
+  rows_before <- nrow(data)
+  log_info(glue::glue("Total rows before filtering: {rows_before}"))
 
   out <-
     data |>
@@ -155,6 +175,18 @@ process_paycodes <- function(data) {
     arrange(subject_code, fullname, day_of_week, start_time) |>
     filter(fullname != "NA NA") # Remove rows with NA names
 
+  rows_after <- nrow(out)
+  log_info(glue::glue("Removed {rows_before - rows_after} rows where fullname was 'NA NA'."))
+
+  paycode_summary <- out |>
+    dplyr::count(paycode) |>
+    dplyr::mutate(paycode = as.character(paycode))
+
+  log_info("Paycode summary:")
+  for (i in 1:nrow(paycode_summary)) {
+    log_info(glue::glue("  {paycode_summary$paycode[i]}: {paycode_summary$n[i]}"))
+  }
+
   attr(out, "source_file") <- attr(data, "source_file")
   out
 }
@@ -172,6 +204,7 @@ process_paycodes <- function(data) {
 #' @return The input data frame, invisibly.
 #' @export
 #' @importFrom openxlsx2 write_xlsx
+#' @importFrom logger log_success
 log_ota_output <- function(data, log_dir = "logs", filename = NULL) {
   roster_path <- attr(data, "source_file")
   if (is.null(roster_path)) {
@@ -191,6 +224,7 @@ log_ota_output <- function(data, log_dir = "logs", filename = NULL) {
   output_path <- file.path(log_dir, filename)
   openxlsx2::write_xlsx(data, file = output_path)
 
-  message("OTA draft saved to: ", output_path)
+  log_info(glue::glue("OTA draft saved to: {output_path}"))
+  log_success(glue::glue("Successfully saved OTA draft to {output_path}"))
   invisible(data)
 }
