@@ -238,10 +238,11 @@ process_paycodes <- function(data) {
   out
 }
 
-#' Compare roster with a previous version and print differences
+#' Compare roster with a previous version and display differences in a gt table
 #'
 #' This function compares a given roster data frame with a previous version from a
-#' CSV file. It identifies and prints added, removed, and modified rows.
+#' CSV file. It identifies added, removed, and modified rows and displays them
+#' in a formatted `gt` table.
 #'
 #' @param df A data frame, typically the output of [process_paycodes()]. It must
 #'   have a `source_file` attribute if `csv` is not provided.
@@ -251,12 +252,14 @@ process_paycodes <- function(data) {
 #' @return Invisibly returns the input data frame `df` with a `has_changes`
 #'   attribute set to `TRUE` if differences were found, and `FALSE` otherwise.
 #'   This allows for chaining with [write_paycodes_to_csv()].
-#' @importFrom dplyr mutate across anti_join inner_join semi_join select all_of arrange bind_rows everything distinct
+#' @importFrom dplyr mutate across anti_join inner_join semi_join select all_of arrange bind_rows everything distinct if_else
 #' @importFrom readr read_csv
 #' @importFrom tools file_path_sans_ext
 #' @importFrom logger log_info
 #' @importFrom glue glue
 #' @importFrom tibble tibble
+#' @importFrom gt gt tab_header tab_style cell_fill cells_body cell_text tab_options
+#' @importFrom stringr str_detect
 #' @export
 compare_rosters <- function(df, csv = NULL) {
   # Automatically find the latest roster file if csv path is not provided
@@ -301,55 +304,129 @@ compare_rosters <- function(df, csv = NULL) {
   old_roster_char <- old_roster_char[, common_cols]
 
   # Define key columns to uniquely identify a row
-  key_cols <- c("fullname", "subject_code", "part_location", "day_of_week", "start_time", "role")
+  key_cols <- c("fullname", "subject_code", "part_location", "day_of_week", "start_time", "role", "paycode")
   if (!all(key_cols %in% common_cols)) {
     stop("One or more key columns are missing from the data frames, cannot compare.")
   }
 
   # 1. Find added rows
-  added <- anti_join(df_char, old_roster_char, by = key_cols)
+  added <- anti_join(df_char, old_roster_char, by = key_cols) %>%
+    mutate(change_type = "Added")
 
   # 2. Find removed rows
-  removed <- anti_join(old_roster_char, df_char, by = key_cols)
+  removed <- anti_join(old_roster_char, df_char, by = key_cols) %>%
+    mutate(change_type = "Removed")
 
   # 3. Find modified rows
-  common_keys_df <- inner_join(df_char, old_roster_char, by = key_cols) %>%
+  common_keys <- inner_join(df_char, old_roster_char, by = key_cols, suffix = c("_new", "_old")) %>%
     select(all_of(key_cols)) %>%
     distinct()
 
-  new_common <- semi_join(df_char, common_keys_df, by = key_cols)
-  old_common <- semi_join(old_roster_char, common_keys_df, by = key_cols)
+  new_common <- semi_join(df_char, common_keys, by = key_cols)
+  old_common <- semi_join(old_roster_char, common_keys, by = key_cols)
 
   modified_new <- anti_join(new_common, old_common, by = common_cols)
 
-  modified <- tibble::tibble()
+  modified_combined <- tibble()
   if (nrow(modified_new) > 0) {
-    modified_old <- semi_join(old_common, modified_new, by = key_cols)
-    modified <- bind_rows(
-      modified_old %>% mutate(change_type = "old_value"),
-      modified_new %>% mutate(change_type = "new_value")
-    ) %>%
-      arrange(across(all_of(c(key_cols, "change_type"))))
+    # Use a left_join to find corresponding old rows, preventing row-count mismatches
+    # from duplicated keys in the old data.
+    old_common_deduped <- old_common %>%
+      distinct(across(all_of(key_cols)), .keep_all = TRUE)
+
+    modified_old <- modified_new %>%
+      select(all_of(key_cols)) %>%
+      left_join(old_common_deduped, by = key_cols)
+
+    # Ensure both dataframes are sorted by key columns to align them for comparison.
+    modified_new <- modified_new %>% arrange(across(all_of(key_cols)))
+    modified_old <- modified_old %>% arrange(across(all_of(key_cols)))
+
+    modified_combined <- modified_new
+
+    value_cols <- setdiff(common_cols, key_cols)
+    for (col in value_cols) {
+      # Compare values, handling NA correctly.
+      is_diff <- (modified_new[[col]] != modified_old[[col]]) |
+        (is.na(modified_new[[col]]) & !is.na(modified_old[[col]])) |
+        (!is.na(modified_new[[col]]) & is.na(modified_old[[col]]))
+      is_diff[is.na(is_diff)] <- FALSE # Treat NA vs NA as not a difference
+
+      modified_combined[[col]] <- if_else(
+        is_diff,
+        paste(modified_old[[col]], "→", modified_new[[col]]),
+        modified_new[[col]]
+      )
+    }
+    modified_combined <- modified_combined %>% mutate(change_type = "Modified")
   }
 
-  has_changes <- (nrow(added) > 0 || nrow(removed) > 0 || nrow(modified_new) > 0)
+  has_changes <- (nrow(added) > 0 || nrow(removed) > 0 || nrow(modified_combined) > 0)
   attr(df, "has_changes") <- has_changes
 
   log_info("Roster comparison summary:")
   if (!has_changes) {
     log_info("No changes detected.")
   } else {
-    if (nrow(added) > 0) {
-      log_info(glue::glue("--- Added ({nrow(added)} rows) ---"))
-      print(added)
-    }
-    if (nrow(removed) > 0) {
-      log_info(glue::glue("--- Removed ({nrow(removed)} rows) ---"))
-      print(removed)
-    }
-    if (nrow(modified) > 0) {
-      log_info(glue::glue("--- Modified ({nrow(modified_new)} rows) ---"))
-      print(modified)
+    all_changes <- bind_rows(added, removed, modified_combined)
+
+    if (nrow(all_changes) > 0) {
+      all_changes <- all_changes %>%
+        mutate(change_type = factor(change_type, levels = c("Added", "Modified", "Removed"))) %>%
+        arrange(change_type, across(all_of(key_cols)))
+
+      # Create a named list for week column labels
+      week_cols <- names(all_changes)[grepl("^w\\d{2}$", names(all_changes))]
+      week_labels <- as.character(as.numeric(sub("w", "", week_cols)))
+      names(week_labels) <- week_cols
+
+      # Combine all labels
+      all_labels <- c(
+        list(
+          subject_code = "Subject",
+          short_code = "Act code",
+          part_location = "Location",
+          day_of_week = "Day",
+          start_time = "Start time",
+          role = "Role",
+          total_hours = "Total hours",
+          phd = "PhD"
+        ),
+        as.list(week_labels)
+      )
+
+      gt_table <- all_changes %>%
+        gt::gt(groupname_col = "change_type") %>%
+        gt::cols_label(.list = all_labels) %>%
+        gt::tab_header(
+          title = "Roster Changes",
+          subtitle = glue::glue("Comparison between current roster and '{basename(csv)}'")
+        ) %>%
+        gt::tab_options(table.font.size = "small") %>%
+        gt::tab_style(
+          style = list(gt::cell_fill(color = "#d4edda")),
+          locations = gt::cells_body(rows = change_type == "Added")
+        ) %>%
+        gt::tab_style(
+          style = list(gt::cell_fill(color = "#f8d7da")),
+          locations = gt::cells_body(rows = change_type == "Removed")
+        )
+
+      value_cols <- setdiff(common_cols, key_cols)
+      for (col in value_cols) {
+        gt_table <- gt_table %>%
+          gt::tab_style(
+            style = list(
+              gt::cell_fill(color = "#fff3cd"),
+              gt::cell_text(weight = "bold")
+            ),
+            locations = gt::cells_body(
+              columns = all_of(col),
+              rows = change_type == "Modified" & stringr::str_detect(.data[[col]], "→")
+            )
+          )
+      }
+      print(gt_table)
     }
   }
 
