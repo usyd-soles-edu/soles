@@ -281,26 +281,15 @@ compare_rosters <- function(df, csv = NULL) {
     }
     latest_file <- sort(log_files, decreasing = TRUE)[1]
     csv <- latest_file
-    log_info(glue("Comparing with latest roster: '{basename(csv)}'"))
+    log_info(glue::glue("Comparing with latest roster: '{basename(csv)}'"))
   }
 
   if (!file.exists(csv)) {
-    stop(glue("Comparison file not found: '{csv}'"))
+    stop(glue::glue("Comparison file not found: '{csv}'"))
   }
 
-  # Read the old roster and map column names to match the new one
-  old_roster <- readr::read_csv(csv, show_col_types = FALSE)
-  name_mapping <- c(
-    "subject_code" = "Activity", "short_code" = "A_code",
-    "part_location" = "Location", "day_of_week" = "Day",
-    "start_time" = "Start Time", "role" = "Role",
-    "total_hours" = "Total Hrs", "fullname" = "Staff Name",
-    "paycode" = "PayCode"
-  )
-  rev_name_mapping <- setNames(names(name_mapping), name_mapping)
-  names(old_roster) <- sapply(names(old_roster), function(n) {
-    if (n %in% names(rev_name_mapping)) rev_name_mapping[[n]] else n
-  }, USE.NAMES = FALSE)
+  # Read the old roster
+  old_roster <- readr::read_csv(csv, show_col_types = FALSE, col_types = readr::cols(.default = "c"))
 
   # Convert all columns to character for robust comparison
   df_char <- df %>% mutate(across(everything(), as.character))
@@ -351,15 +340,15 @@ compare_rosters <- function(df, csv = NULL) {
     log_info("No changes detected.")
   } else {
     if (nrow(added) > 0) {
-      log_info(glue("--- Added ({nrow(added)} rows) ---"))
+      log_info(glue::glue("--- Added ({nrow(added)} rows) ---"))
       print(added)
     }
     if (nrow(removed) > 0) {
-      log_info(glue("--- Removed ({nrow(removed)} rows) ---"))
+      log_info(glue::glue("--- Removed ({nrow(removed)} rows) ---"))
       print(removed)
     }
     if (nrow(modified) > 0) {
-      log_info(glue("--- Modified ({nrow(modified_new)} rows) ---"))
+      log_info(glue::glue("--- Modified ({nrow(modified_new)} rows) ---"))
       print(modified)
     }
   }
@@ -414,19 +403,7 @@ write_paycodes_to_csv <- function(data) {
   output_path <- file.path(log_dir, new_filename)
 
   log_info(glue::glue("Writing OTA data to '{output_path}'..."))
-  data_to_write <- data %>%
-    dplyr::rename(
-      "Activity" = subject_code,
-      "A_code" = short_code,
-      "Location" = part_location,
-      "Day" = day_of_week,
-      "Start Time" = start_time,
-      "Role" = role,
-      "Total Hrs" = total_hours,
-      "Staff Name" = fullname,
-      "PayCode" = paycode
-    )
-  readr::write_csv(data_to_write, output_path)
+  readr::write_csv(data, output_path)
   log_info("Done.")
   invisible(data)
 }
