@@ -252,14 +252,15 @@ process_paycodes <- function(data) {
 #' @return Invisibly returns the input data frame `df` with a `has_changes`
 #'   attribute set to `TRUE` if differences were found, and `FALSE` otherwise.
 #'   This allows for chaining with [write_paycodes_to_csv()].
-#' @importFrom dplyr mutate across anti_join inner_join semi_join select all_of arrange bind_rows everything distinct if_else
+#' @importFrom dplyr mutate across anti_join inner_join semi_join select all_of arrange bind_rows everything distinct if_else rename
 #' @importFrom readr read_csv
 #' @importFrom tools file_path_sans_ext
 #' @importFrom logger log_info
 #' @importFrom glue glue
 #' @importFrom tibble tibble
-#' @importFrom gt gt tab_header tab_style cell_fill cells_body cell_text tab_options
-#' @importFrom stringr str_detect
+#' @importFrom gt gt tab_header tab_style cell_fill cells_body cell_text tab_options tab_source_note md
+#' @importFrom stringr str_detect str_to_title
+#' @importFrom tidyr pivot_longer
 #' @export
 compare_rosters <- function(df, csv = NULL) {
   # Automatically find the latest roster file if csv path is not provided
@@ -368,6 +369,64 @@ compare_rosters <- function(df, csv = NULL) {
   if (!has_changes) {
     log_info("No changes detected.")
   } else {
+    # --- Start of Detailed Week-by-Week Summary Notes Generation ---
+
+    week_cols <- names(df_char)[grepl("^w\\d{2}$", names(df_char))]
+    session_id_cols <- c("fullname", "subject_code", "part_location", "day_of_week", "start_time", "role")
+
+    # Pivot to long format for week-by-week comparison
+    df_long <- df_char %>%
+      tidyr::pivot_longer(cols = all_of(week_cols), names_to = "week", values_to = "hours") %>%
+      filter(as.numeric(hours) > 0)
+
+    old_roster_long <- old_roster_char %>%
+      tidyr::pivot_longer(cols = all_of(week_cols), names_to = "week", values_to = "hours") %>%
+      filter(as.numeric(hours) > 0)
+
+    # Identify added and removed sessions
+    added_sessions <- anti_join(df_long, old_roster_long, by = c(session_id_cols, "week"))
+    removed_sessions <- anti_join(old_roster_long, df_long, by = c(session_id_cols, "week"))
+
+    # Identify replacements
+    replacement_session_cols <- setdiff(session_id_cols, "fullname")
+    replacements <- inner_join(
+      added_sessions,
+      removed_sessions,
+      by = c(replacement_session_cols, "week"),
+      suffix = c("_new", "_old")
+    )
+
+    notes <- c()
+    if (nrow(replacements) > 0) {
+      notes <- c(notes, glue::glue(
+        "* In Week {as.numeric(sub('w', '', replacements$week))}, {replacements$fullname_new} replaces {replacements$fullname_old} on {replacements$day_of_week} {replacements$start_time} ({str_to_title(replacements$role)})"
+      ))
+    }
+
+    # Identify pure additions
+    added_only <- anti_join(added_sessions, replacements, by = c("fullname" = "fullname_new", replacement_session_cols, "week"))
+    if (nrow(added_only) > 0) {
+      notes <- c(notes, glue::glue(
+        "* In Week {as.numeric(sub('w', '', added_only$week))}, {added_only$fullname} is added to {added_only$day_of_week} {added_only$start_time} ({str_to_title(added_only$role)})"
+      ))
+    }
+
+    # Identify pure removals
+    removed_only <- anti_join(removed_sessions, replacements, by = c("fullname" = "fullname_old", replacement_session_cols, "week"))
+    if (nrow(removed_only) > 0) {
+      notes <- c(notes, glue::glue(
+        "* In Week {as.numeric(sub('w', '', removed_only$week))}, {removed_only$fullname} is removed from {removed_only$day_of_week} {removed_only$start_time} ({str_to_title(removed_only$role)}) with no replacement"
+      ))
+    }
+
+    summary_notes <- if (length(notes) > 0) {
+      paste("### Summary of Changes:\n\n", paste(sort(notes), collapse = "\n"))
+    } else {
+      NULL
+    }
+
+    # --- End of Summary Notes Generation ---
+
     all_changes <- bind_rows(added, removed, modified_combined)
 
     if (nrow(all_changes) > 0) {
@@ -426,6 +485,13 @@ compare_rosters <- function(df, csv = NULL) {
             )
           )
       }
+
+      # Add summary notes to the table footer
+      if (!is.null(summary_notes)) {
+        gt_table <- gt_table %>%
+          gt::tab_source_note(source_note = gt::md(summary_notes))
+      }
+
       print(gt_table)
     }
   }
