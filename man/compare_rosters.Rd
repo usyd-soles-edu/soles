@@ -2,7 +2,7 @@
 % Please edit documentation in R/roster_to_ota.R
 \name{compare_rosters}
 \alias{compare_rosters}
-\title{Compare roster with a previous version and print differences}
+\title{Compare roster with a previous version and display differences in a gt table}
 \usage{
 compare_rosters(df, csv = NULL)
 }
@@ -21,5 +21,6 @@ This allows for chaining with \code{\link[=write_paycodes_to_csv]{write_paycodes
 }
 \description{
 This function compares a given roster data frame with a previous version from a
-CSV file. It identifies and prints added, removed, and modified rows.
+CSV file. It identifies added, removed, and modified rows and displays them
+in a formatted \code{gt} table.
 }
