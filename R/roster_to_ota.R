@@ -126,7 +126,7 @@ roster_is_biol1007 <- function(path) {
 #'
 #' @param data A data frame of staff allocations, typically from roster_is_BIOL1007.
 #' @return A data frame with paycodes, total hours, and session details for each staff member.
-#' @importFrom dplyr mutate across group_by ungroup arrange select case_when row_number
+#' @importFrom dplyr mutate across group_by ungroup arrange select case_when row_number filter
 #' @export
 process_paycodes <- function(data) {
   log_info("Processing paycodes...")
@@ -142,43 +142,90 @@ process_paycodes <- function(data) {
   non_week_cols <- setdiff(names(data), week_cols)
   data <- data[, c(non_week_cols, week_cols_sorted)]
 
-  rows_before <- nrow(data)
-  log_info(glue::glue("Total rows before filtering: {rows_before}"))
+  log_info(glue::glue("Total rows before processing: {nrow(data)}"))
 
-  out <-
-    data |>
+  long_data <- data |>
     # Convert session counts to hours for each week
     mutate(across(all_of(week_cols_sorted), ~ . * 3)) |>
-    # Calculate total_hours and set day order
-    mutate(
-      total_hours = rowSums(across(all_of(week_cols_sorted)), na.rm = TRUE),
-      day_of_week = factor(day_of_week, levels = day_order)
+    # Reshape to long format
+    tidyr::pivot_longer(
+      cols = all_of(week_cols_sorted),
+      names_to = "week",
+      values_to = "hours"
     ) |>
-    # Group by person to determine first session
-    group_by(fullname) |>
-    arrange(day_of_week, start_time) |>
-    # Assign paycodes
+    # Only consider sessions with assigned hours
+    filter(hours > 0) |>
+    mutate(day_of_week = factor(day_of_week, levels = day_order))
+
+  # Process Demonstrator paycodes (logic remains unchanged)
+  demo_paycodes <- long_data |>
+    filter(role == "Demonstrator") |>
     mutate(
       paycode = case_when(
-        role == "Demonstrator" & phd == 1 ~ "DE1",
-        role == "Demonstrator" & (is.na(phd) | phd == 0) ~ "DE2",
-        role == "Tutor" & phd == 1 & row_number() == 1 ~ "TU1",
-        role == "Tutor" & phd == 1 & row_number() > 1 ~ "TU3",
-        role == "Tutor" & (is.na(phd) | phd == 0) & row_number() == 1 ~ "TU2",
-        role == "Tutor" & (is.na(phd) | phd == 0) & row_number() > 1 ~ "TU4",
+        phd == 1 ~ "DE1",
+        is.na(phd) | phd == 0 ~ "DE2",
+        TRUE ~ NA_character_
+      )
+    )
+
+  # Process Tutor paycodes (new week-by-week logic)
+  tutor_paycodes <- long_data |>
+    filter(role == "Tutor") |>
+    group_by(fullname, week) |>
+    arrange(day_of_week, start_time) |>
+    mutate(
+      session_rank = row_number(),
+      paycode = case_when(
+        phd == 1 & session_rank == 1 ~ "TU1",
+        phd == 1 & session_rank > 1 ~ "TU3",
+        (is.na(phd) | phd == 0) & session_rank == 1 ~ "TU2",
+        (is.na(phd) | phd == 0) & session_rank > 1 ~ "TU4",
         TRUE ~ NA_character_
       )
     ) |>
     ungroup() |>
-    mutate(activity = "Practical") |>
-    select(subject_code, short_code, part_location, day_of_week, start_time, activity, role, total_hours, fullname, phd, paycode, everything()) |>
-    arrange(subject_code, fullname, day_of_week, start_time) |>
-    filter(fullname != "NA NA") # Remove rows with NA names
+    select(-session_rank)
 
-  rows_after <- nrow(out)
-  log_info(glue::glue("Removed {rows_before - rows_after} rows where fullname was 'NA NA'."))
+  # Combine and filter
+  combined_data <- dplyr::bind_rows(demo_paycodes, tutor_paycodes) |>
+    mutate(activity = "Practical") |>
+    filter(fullname != "NA NA")
+
+  # Pivot to wide format
+  out <- combined_data |>
+    tidyr::pivot_wider(
+      id_cols = c(subject_code, short_code, part_location, day_of_week, start_time, activity, role, fullname, phd, paycode),
+      names_from = week,
+      values_from = hours,
+      values_fill = 0
+    )
+
+  # Ensure all weeks from w01 to w13 are present
+  all_weeks <- sprintf("w%02d", 1:13)
+  missing_weeks <- setdiff(all_weeks, names(out))
+  if (length(missing_weeks) > 0) {
+    for (wk in missing_weeks) {
+      out[[wk]] <- 0
+    }
+  }
+
+  # Dynamically find week columns and calculate total_hours
+  week_cols <- names(out)[grepl("^w\\d{2}$", names(out))]
+  week_cols_sorted <- week_cols[order(as.numeric(sub("w", "", week_cols)))]
+
+  out <- out |>
+    mutate(total_hours = rowSums(across(all_of(week_cols_sorted)), na.rm = TRUE)) |>
+    # Arrange columns for final output
+    select(
+      subject_code, short_code, part_location, day_of_week, start_time,
+      role, total_hours, fullname, phd, paycode, all_of(week_cols_sorted)
+    ) |>
+    arrange(fullname, subject_code, day_of_week, start_time)
+
+  log_info(glue::glue("Total rows after processing: {nrow(out)}"))
 
   paycode_summary <- out |>
+    filter(!is.na(paycode)) |>
     dplyr::count(paycode) |>
     dplyr::mutate(paycode = as.character(paycode))
 
@@ -191,40 +238,195 @@ process_paycodes <- function(data) {
   out
 }
 
-#' Log OTA output to an Excel file
+#' Compare roster with a previous version and print differences
 #'
-#' Saves the processed OTA data frame to an Excel file, with options for custom
-#' filenames and logging directories. The original source file path is retrieved
-#' from the data's attributes.
+#' This function compares a given roster data frame with a previous version from a
+#' CSV file. It identifies and prints added, removed, and modified rows.
 #'
-#' @param data A data frame, expected to have a "source_file" attribute.
-#' @param log_dir The directory where the log file will be saved. Defaults to "logs".
-#' @param filename The name of the output file. If NULL, a name is generated
-#'   based on the timestamp and the original roster filename.
-#' @return The input data frame, invisibly.
+#' @param df A data frame, typically the output of [process_paycodes()]. It must
+#'   have a `source_file` attribute if `csv` is not provided.
+#' @param csv Optional. Path to the CSV file for comparison. If `NULL` (default),
+#'   the function automatically finds the latest relevant roster file in the
+#'   'logs' directory based on the `source_file` attribute of `df`.
+#' @return Invisibly returns the input data frame `df` with a `has_changes`
+#'   attribute set to `TRUE` if differences were found, and `FALSE` otherwise.
+#'   This allows for chaining with [write_paycodes_to_csv()].
+#' @importFrom dplyr mutate across anti_join inner_join semi_join select all_of arrange bind_rows everything distinct
+#' @importFrom readr read_csv
+#' @importFrom tools file_path_sans_ext
+#' @importFrom logger log_info
+#' @importFrom glue glue
+#' @importFrom tibble tibble
 #' @export
-#' @importFrom openxlsx2 write_xlsx
-#' @importFrom logger log_success
-log_ota_output <- function(data, log_dir = "logs", filename = NULL) {
-  roster_path <- attr(data, "source_file")
-  if (is.null(roster_path)) {
-    stop("The 'source_file' attribute is missing from the data.")
+compare_rosters <- function(df, csv = NULL) {
+  # Automatically find the latest roster file if csv path is not provided
+  if (is.null(csv)) {
+    source_file <- attr(df, "source_file")
+    if (is.null(source_file)) {
+      stop("The 'source_file' attribute is missing from the data frame `df`.")
+    }
+    log_dir <- file.path(dirname(source_file), "logs")
+    if (!dir.exists(log_dir)) {
+      log_info("Log directory not found. No previous roster to compare against.")
+      attr(df, "has_changes") <- TRUE # Assume changes if no log to compare
+      return(invisible(df))
+    }
+    original_filename_base <- tools::file_path_sans_ext(basename(source_file))
+    log_files <- list.files(log_dir, pattern = paste0(".*-", original_filename_base, "\\.csv$"), full.names = TRUE)
+
+    if (length(log_files) == 0) {
+      log_info("No previous roster files found for comparison.")
+      attr(df, "has_changes") <- TRUE # Assume changes if no previous file
+      return(invisible(df))
+    }
+    latest_file <- sort(log_files, decreasing = TRUE)[1]
+    csv <- latest_file
+    log_info(glue("Comparing with latest roster: '{basename(csv)}'"))
   }
 
-  if (is.null(filename)) {
-    timestamp <- format(Sys.time(), "%Y-%m-%d_%H%M%S")
-    basename <- tools::file_path_sans_ext(basename(roster_path))
-    filename <- paste0(timestamp, "_", basename, "_ota_draft.xlsx")
+  if (!file.exists(csv)) {
+    stop(glue("Comparison file not found: '{csv}'"))
   }
 
+  # Read the old roster and map column names to match the new one
+  old_roster <- readr::read_csv(csv, show_col_types = FALSE)
+  name_mapping <- c(
+    "subject_code" = "Activity", "short_code" = "A_code",
+    "part_location" = "Location", "day_of_week" = "Day",
+    "start_time" = "Start Time", "role" = "Role",
+    "total_hours" = "Total Hrs", "fullname" = "Staff Name",
+    "paycode" = "PayCode"
+  )
+  rev_name_mapping <- setNames(names(name_mapping), name_mapping)
+  names(old_roster) <- sapply(names(old_roster), function(n) {
+    if (n %in% names(rev_name_mapping)) rev_name_mapping[[n]] else n
+  }, USE.NAMES = FALSE)
+
+  # Convert all columns to character for robust comparison
+  df_char <- df %>% mutate(across(everything(), as.character))
+  old_roster_char <- old_roster %>% mutate(across(everything(), as.character))
+
+  # Align columns to ensure comparison is fair
+  common_cols <- intersect(names(df_char), names(old_roster_char))
+  df_char <- df_char[, common_cols]
+  old_roster_char <- old_roster_char[, common_cols]
+
+  # Define key columns to uniquely identify a row
+  key_cols <- c("fullname", "subject_code", "part_location", "day_of_week", "start_time", "role")
+  if (!all(key_cols %in% common_cols)) {
+    stop("One or more key columns are missing from the data frames, cannot compare.")
+  }
+
+  # 1. Find added rows
+  added <- anti_join(df_char, old_roster_char, by = key_cols)
+
+  # 2. Find removed rows
+  removed <- anti_join(old_roster_char, df_char, by = key_cols)
+
+  # 3. Find modified rows
+  common_keys_df <- inner_join(df_char, old_roster_char, by = key_cols) %>%
+    select(all_of(key_cols)) %>%
+    distinct()
+
+  new_common <- semi_join(df_char, common_keys_df, by = key_cols)
+  old_common <- semi_join(old_roster_char, common_keys_df, by = key_cols)
+
+  modified_new <- anti_join(new_common, old_common, by = common_cols)
+
+  modified <- tibble::tibble()
+  if (nrow(modified_new) > 0) {
+    modified_old <- semi_join(old_common, modified_new, by = key_cols)
+    modified <- bind_rows(
+      modified_old %>% mutate(change_type = "old_value"),
+      modified_new %>% mutate(change_type = "new_value")
+    ) %>%
+      arrange(across(all_of(c(key_cols, "change_type"))))
+  }
+
+  has_changes <- (nrow(added) > 0 || nrow(removed) > 0 || nrow(modified_new) > 0)
+  attr(df, "has_changes") <- has_changes
+
+  log_info("Roster comparison summary:")
+  if (!has_changes) {
+    log_info("No changes detected.")
+  } else {
+    if (nrow(added) > 0) {
+      log_info(glue("--- Added ({nrow(added)} rows) ---"))
+      print(added)
+    }
+    if (nrow(removed) > 0) {
+      log_info(glue("--- Removed ({nrow(removed)} rows) ---"))
+      print(removed)
+    }
+    if (nrow(modified) > 0) {
+      log_info(glue("--- Modified ({nrow(modified_new)} rows) ---"))
+      print(modified)
+    }
+  }
+
+  invisible(df)
+}
+
+
+#' Write processed paycode data to a CSV file with a timestamped log
+#'
+#' This function takes the output from [process_paycodes()] and writes it to a
+#' CSV file. The output file is automatically named with a timestamp and the
+#' original roster filename, and saved in a 'logs' subdirectory relative to the
+#' original roster file.
+#'
+#' @param data A data frame, typically the output of [process_paycodes()]. This
+#'   data frame may have a `"has_changes"` attribute (logical) to indicate
+#'   whether changes have been detected compared to a previous version. If this
+#'   attribute is `FALSE`, the function will skip writing the CSV.
+#' @return Invisibly returns the input data frame.
+#' @importFrom readr write_csv
+#' @importFrom logger log_info
+#' @importFrom glue glue
+#' @export
+write_paycodes_to_csv <- function(data) {
+  # Check for the 'has_changes' attribute
+  has_changes <- attr(data, "has_changes")
+
+  # If has_changes is FALSE, log and exit without writing
+  if (!is.null(has_changes) && has_changes == FALSE) {
+    log_info("Skipping CSV write.")
+    return(invisible(data))
+  }
+
+  # Get the original source file path from the data attribute
+  source_file <- attr(data, "source_file")
+  if (is.null(source_file)) {
+    stop("The 'source_file' attribute is missing from the data frame.")
+  }
+
+  # Create the logs directory if it doesn't exist
+  log_dir <- file.path(dirname(source_file), "logs")
   if (!dir.exists(log_dir)) {
     dir.create(log_dir, recursive = TRUE)
+    log_info(glue::glue("Created log directory: '{log_dir}'"))
   }
 
-  output_path <- file.path(log_dir, filename)
-  openxlsx2::write_xlsx(data, file = output_path)
+  # Create the timestamped filename
+  timestamp <- format(Sys.time(), "%Y-%m-%d-%H%M%S")
+  original_filename <- tools::file_path_sans_ext(basename(source_file))
+  new_filename <- glue::glue("{timestamp}-{original_filename}.csv")
+  output_path <- file.path(log_dir, new_filename)
 
-  log_info(glue::glue("OTA draft saved to: {output_path}"))
-  log_success(glue::glue("Successfully saved OTA draft to {output_path}"))
+  log_info(glue::glue("Writing OTA data to '{output_path}'..."))
+  data_to_write <- data %>%
+    dplyr::rename(
+      "Activity" = subject_code,
+      "A_code" = short_code,
+      "Location" = part_location,
+      "Day" = day_of_week,
+      "Start Time" = start_time,
+      "Role" = role,
+      "Total Hrs" = total_hours,
+      "Staff Name" = fullname,
+      "PayCode" = paycode
+    )
+  readr::write_csv(data_to_write, output_path)
+  log_info("Done.")
   invisible(data)
 }

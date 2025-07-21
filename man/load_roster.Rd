@@ -4,12 +4,14 @@
 \alias{load_roster}
 \title{Load and process a roster file for a specific unit}
 \usage{
-load_roster(path, unit)
+load_roster(path, unit, verbose = NULL)
 }
 \arguments{
 \item{path}{Path to the Excel roster file.}
 
 \item{unit}{Character string specifying the unit (e.g., "BIOL1007").}
+
+\item{verbose}{If \code{TRUE}, print verbose output. If \code{NULL} (default), the global log level is unchanged.}
 }
 \value{
 A processed data frame with staff allocation counts per week and session.
