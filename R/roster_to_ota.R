@@ -258,7 +258,7 @@ process_paycodes <- function(data) {
 #' @importFrom logger log_info
 #' @importFrom glue glue
 #' @importFrom tibble tibble
-#' @importFrom gt gt tab_header tab_style cell_fill cells_body cell_text tab_options tab_source_note md
+#' @importFrom gt gt tab_header tab_style cell_fill cells_body cell_text tab_options tab_source_note md cell_borders px cells_column_labels gtsave
 #' @importFrom stringr str_detect str_to_title
 #' @importFrom tidyr pivot_longer
 #' @export
@@ -486,11 +486,33 @@ compare_rosters <- function(df, csv = NULL) {
           )
       }
 
+      # Add vertical lines to the left of each week column
+      if (length(week_cols) > 0) {
+        gt_table <- gt_table %>%
+          gt::tab_style(
+            style = gt::cell_borders(
+              sides = "left",
+              weight = gt::px(1.5)
+            ),
+            locations = list(
+              gt::cells_body(columns = all_of(week_cols)),
+              gt::cells_column_labels(columns = all_of(week_cols))
+            )
+          )
+      }
+
       # Add summary notes to the table footer
       if (!is.null(summary_notes)) {
         gt_table <- gt_table %>%
           gt::tab_source_note(source_note = gt::md(summary_notes))
       }
+
+      # Save the gt table to a file
+      log_dir <- file.path(dirname(attr(df, "source_file")), "logs")
+      dir.create(log_dir, showWarnings = FALSE, recursive = TRUE)
+      output_path <- file.path(log_dir, "roster_change_preview.html")
+      gt::gtsave(gt_table, filename = output_path)
+      log_info(glue::glue("Roster change preview saved to '{output_path}'"))
 
       print(gt_table)
     }
