@@ -181,16 +181,14 @@ set_log_level <- function(verbose = FALSE) {
 #' @keywords internal
 are_dfs_equal <- function(df1, df2) {
   # Prepare df1
-  df1_prep <- df1 |>
-    dplyr::mutate(dplyr::across(dplyr::everything(), as.character)) |>
-    dplyr::select(sort(names(.))) |>
-    dplyr::arrange(dplyr::across(dplyr::everything()))
+  df1_prep <- df1 |> dplyr::mutate(dplyr::across(dplyr::everything(), as.character))
+  df1_prep <- df1_prep[, sort(names(df1_prep)), drop = FALSE]
+  df1_prep <- df1_prep |> dplyr::arrange(dplyr::across(dplyr::everything()))
 
   # Prepare df2
-  df2_prep <- df2 |>
-    dplyr::mutate(dplyr::across(dplyr::everything(), as.character)) |>
-    dplyr::select(sort(names(.))) |>
-    dplyr::arrange(dplyr::across(dplyr::everything()))
+  df2_prep <- df2 |> dplyr::mutate(dplyr::across(dplyr::everything(), as.character))
+  df2_prep <- df2_prep[, sort(names(df2_prep)), drop = FALSE]
+  df2_prep <- df2_prep |> dplyr::arrange(dplyr::across(dplyr::everything()))
 
   # Compare
   return(identical(df1_prep, df2_prep))
