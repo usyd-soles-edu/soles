@@ -38,6 +38,7 @@ load_roster <- function(path, unit, verbose = NULL) {
 #' @importFrom dplyr mutate across filter left_join select group_by ungroup count recode
 #' @importFrom tidyr fill pivot_longer extract drop_na pivot_wider
 #' @importFrom stringr str_extract
+#' @importFrom logger log_warn
 #' @export
 roster_is_biol1007 <- function(path) {
   log_info("Processing BIOL1007 roster...")
@@ -94,6 +95,20 @@ roster_is_biol1007 <- function(path) {
       role = recode(role, demo = "Demonstrator", sup = "Tutor")
     ) |>
     select(-c(practical, surname, given_name, start_hour, role_lab, lab, new))
+
+  # Check for staff in roster who are not in the staff list
+  unmatched_staff <- roster_detailed %>%
+    filter(fullname == "NA NA") %>%
+    dplyr::distinct(name) %>%
+    dplyr::pull(name)
+
+  if (length(unmatched_staff) > 0) {
+    log_warn(glue::glue(
+      "The following names from the roster were not found in the staff list and will be ignored: ",
+      "{paste(unmatched_staff, collapse = ', ')}"
+    ))
+  }
+
   log_info(glue::glue("Identified {length(unique(roster_detailed$fullname))} unique staff members."))
 
   # Get all unique weeks
@@ -252,7 +267,7 @@ process_paycodes <- function(data) {
 #' @return Invisibly returns the input data frame `df` with a `has_changes`
 #'   attribute set to `TRUE` if differences were found, and `FALSE` otherwise.
 #'   This allows for chaining with [write_paycodes_to_csv()].
-#' @importFrom dplyr mutate across anti_join inner_join semi_join select all_of arrange bind_rows everything distinct if_else rename
+#' @importFrom dplyr mutate across anti_join inner_join semi_join select all_of arrange bind_rows everything distinct if_else rename relocate
 #' @importFrom readr read_csv
 #' @importFrom tools file_path_sans_ext
 #' @importFrom logger log_info
@@ -431,8 +446,10 @@ compare_rosters <- function(df, csv = NULL) {
 
     if (nrow(all_changes) > 0) {
       all_changes <- all_changes %>%
-        mutate(change_type = factor(change_type, levels = c("Added", "Modified", "Removed"))) %>%
-        arrange(change_type, across(all_of(key_cols)))
+        dplyr::rename(Action = change_type) %>%
+        mutate(Action = factor(Action, levels = c("Added", "Modified", "Removed"))) %>%
+        arrange(Action, across(all_of(key_cols))) %>%
+        dplyr::relocate(Action)
 
       # Create a named list for week column labels
       week_cols <- names(all_changes)[grepl("^w\\d{2}$", names(all_changes))]
@@ -455,7 +472,7 @@ compare_rosters <- function(df, csv = NULL) {
       )
 
       gt_table <- all_changes %>%
-        gt::gt(groupname_col = "change_type") %>%
+        gt::gt() %>%
         gt::cols_label(.list = all_labels) %>%
         gt::tab_header(
           title = "Roster Changes",
@@ -464,11 +481,11 @@ compare_rosters <- function(df, csv = NULL) {
         gt::tab_options(table.font.size = "small") %>%
         gt::tab_style(
           style = list(gt::cell_fill(color = "#d4edda")),
-          locations = gt::cells_body(rows = change_type == "Added")
+          locations = gt::cells_body(rows = Action == "Added")
         ) %>%
         gt::tab_style(
           style = list(gt::cell_fill(color = "#f8d7da")),
-          locations = gt::cells_body(rows = change_type == "Removed")
+          locations = gt::cells_body(rows = Action == "Removed")
         )
 
       value_cols <- setdiff(common_cols, key_cols)
@@ -481,24 +498,22 @@ compare_rosters <- function(df, csv = NULL) {
             ),
             locations = gt::cells_body(
               columns = all_of(col),
-              rows = change_type == "Modified" & stringr::str_detect(.data[[col]], "→")
+              rows = Action == "Modified" & stringr::str_detect(.data[[col]], "→")
             )
           )
       }
 
-      # Add vertical lines to the left of each week column
+      # Add vertical banding to week columns for readability
       if (length(week_cols) > 0) {
-        gt_table <- gt_table %>%
-          gt::tab_style(
-            style = gt::cell_borders(
-              sides = "left",
-              weight = gt::px(1.5)
-            ),
-            locations = list(
-              gt::cells_body(columns = all_of(week_cols)),
-              gt::cells_column_labels(columns = all_of(week_cols))
+        # Band every second week column
+        banded_cols <- week_cols[seq(2, length(week_cols), by = 2)]
+        if (length(banded_cols) > 0) {
+          gt_table <- gt_table %>%
+            gt::tab_style(
+              style = gt::cell_fill(color = "#f7f7f7"),
+              locations = gt::cells_body(columns = all_of(banded_cols))
             )
-          )
+        }
       }
 
       # Add summary notes to the table footer
