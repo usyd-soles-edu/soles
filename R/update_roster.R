@@ -190,33 +190,18 @@ update_roster <- function(current_df, previous_df = NULL, verbose = TRUE) {
 summary.roster_changes <- function(object, ...) {
   # Helper function to format role names
   format_role <- function(role) {
-    ifelse(role == "sup", "Supervisor", "Demonstrator")
+    ifelse(role == "sup", "Tutor", "Demonstrator")
   }
   
-  # Helper function to format a single change
-  format_change <- function(change_type, row) {
-    week <- sub("^w", "Wk ", row$week)
-    day <- row$day_of_week
-    time <- row$start_time
+  # Helper function to get condensed details
+  get_details <- function(row, type) {
     role <- format_role(row$role)
-    lab <- row$lab
-    subject <- toupper(str_extract(row$subject_activitycode, "^[^-]+"))
-    activity_code <- str_extract(row$subject_activitycode, "(?<=-).*")
     
-    date_str <- format(row$date, "%Y-%m-%d")
-    lab_num <- sub("Lab ", "", lab)
-    start_hour <- as.integer(substr(time, 1, 2))
-    end_hour <- start_hour + 3
-    start_12 <- ifelse(start_hour > 12, start_hour - 12, start_hour)
-    end_12 <- ifelse(end_hour > 12, end_hour - 12, end_hour)
-    time_str <- paste0(start_12, "-", end_12, "pm")
-    activity_code_02 <- sprintf("%02d", as.integer(activity_code))
-    
-    switch(change_type,
-           "addition" = paste0("In ", week, " (", date_str, ") ", cli::style_bold(cli::col_blue(row$name)), " is added (", role, ") for ", subject, " Activity ", activity_code_02, " (", lab_num, " ", day, " ", time_str, ")"),
-           "removal" = paste0("In ", week, " (", date_str, ") ", cli::style_bold(cli::col_blue(row$name)), " is removed (", role, ") for ", subject, " Activity ", activity_code_02, " (", lab_num, " ", day, " ", time_str, ")"),
-           "replacement" = paste0("In ", week, " (", date_str, ") ", cli::style_bold(cli::col_blue(row$current_name)), " replaces ", cli::style_bold(cli::col_red(row$previous_name)), " (Demonstrator) for ", subject, " Activity ", activity_code_02, " (", lab_num, " ", day, " ", time_str, ")"),
-           "rate_change" = paste0("In ", week, " (", date_str, ") ", cli::style_bold(cli::col_blue(row$name)), "'s rate changed from ", row$previous_rate, " to ", row$current_rate, " (", role, ") for ", subject, " Activity ", activity_code_02, " (", lab_num, " ", day, " ", time_str, ")")
+    switch(type,
+           "Addition" = paste0(cli::style_bold(cli::col_blue(row$name)), " added (", role, ")"),
+           "Removal" = paste0(cli::style_bold(cli::col_blue(row$name)), " removed (", role, ")"),
+           "Replacement" = paste0(cli::style_bold(cli::col_blue(row$current_name)), " ← ", cli::style_bold(cli::col_red(row$previous_name)), " (Demo)"),
+           "Rate Change" = paste0(cli::style_bold(cli::col_blue(row$name)), " rate ", row$previous_rate, " → ", row$current_rate, " (", role, ")")
     )
   }
   
@@ -227,58 +212,111 @@ summary.roster_changes <- function(object, ...) {
   total_rate_changes <- nrow(object$rate_changes)
   total_changes <- total_additions + total_removals + total_replacements + total_rate_changes
   
-  # Sort changes by date
-  object$additions <- object$additions |> arrange(date)
-  object$removals <- object$removals |> arrange(date)
-  object$replacements <- object$replacements |> arrange(date)
-  object$rate_changes <- object$rate_changes |> arrange(date)
-  
   # Print summary header
   cat(cli::style_bold("\nRoster Changes Summary\n"))
   cat(cli::style_bold("======================\n"))
-  cat(glue::glue("Total changes: {total_changes} |"))
-  cat(glue::glue(" Additions: {total_additions} |"))
-  cat(glue::glue(" Removals: {total_removals} |"))
-  cat(glue::glue(" Replacements: {total_replacements} |"))
-  cat(glue::glue(" Rate changes: {total_rate_changes} "))
+  cat("Total changes: ", total_changes, " |")
+  cat(" Additions: ", total_additions, " |")
+  cat(" Removals: ", total_removals, " |")
+  cat(" Replacements: ", total_replacements, " |")
+  cat(" Rate changes: ", total_rate_changes, " ")
   cat("\n\n")
   
-  # Print details for each type
-  if (total_additions > 0) {
-    cat(cli::style_bold("Additions:\n"))
-    for (i in seq_len(nrow(object$additions))) {
-      row <- object$additions[i, ]
-      cat(format_change("addition", row), "\n")
+  # Helper function to print tables for a specific change type
+  print_change_section <- function(changes_df, section_title, type_label) {
+    if (nrow(changes_df) == 0) return()
+    
+    cat(cli::style_bold(section_title), "\n", sep = "")
+    cat(cli::style_bold(strrep("=", nchar(section_title))), "\n", sep = "")
+    
+    # Add type column and arrange by date
+    changes_with_type <- changes_df |> 
+      mutate(type = type_label) |> 
+      arrange(date)
+    
+    # Group by week and print tables
+    weeks <- unique(changes_with_type$week)
+    for (wk in sort(weeks)) {
+      wk_changes <- changes_with_type |> filter(week == wk)
+      cat("\n")
+      cat(cli::style_bold(glue::glue("Wk {sub('^w', '', wk)}")))
+      cat("\n")
+      
+      # Create table data frame
+      table_df <- data.frame(Date = character(), Type = character(), Details = character(), Activity = character())
+      for (i in seq_len(nrow(wk_changes))) {
+        row <- wk_changes[i, ]
+        details <- get_details(row, row$type)
+        
+        subject <- toupper(str_extract(row$subject_activitycode, "^[^-]+"))
+        activity_code <- str_extract(row$subject_activitycode, "(?<=-).*")
+        lab_num <- sub("Lab ", "", row$lab)
+        start_hour <- as.integer(substr(row$start_time, 1, 2))
+        end_hour <- start_hour + 3
+        start_12 <- ifelse(start_hour > 12, start_hour - 12, start_hour)
+        end_12 <- ifelse(end_hour > 12, end_hour - 12, end_hour)
+        time_str <- paste0(start_12, "-", end_12, "pm")
+        activity <- paste0(subject, " ", cli::style_bold(sprintf("%02d", as.integer(activity_code))), ": ", lab_num, " ", row$day_of_week, " ", time_str)
+        
+        table_df <- rbind(table_df, data.frame(
+          Date = format(row$date, "%Y-%m-%d"),
+          Type = row$type,
+          Details = details,
+          Activity = activity
+        ))
+      }
+      
+      # Print table with proper alignment using base R formatting
+      # Calculate column widths based on visible content (strip ANSI codes)
+      col_widths <- c(
+        Date = max(nchar(table_df$Date), na.rm = TRUE),
+        Type = max(nchar(table_df$Type), na.rm = TRUE),
+        Details = max(nchar(cli::ansi_strip(table_df$Details)), na.rm = TRUE),
+        Activity = max(nchar(cli::ansi_strip(table_df$Activity)), na.rm = TRUE)
+      )
+
+      # Ensure minimum widths
+      col_widths <- pmax(col_widths, c(Date = 10, Type = 12, Details = 20, Activity = 15))
+
+      # Function to pad strings properly accounting for ANSI codes
+      pad_string <- function(text, width) {
+        visible_text <- cli::ansi_strip(text)
+        padding_needed <- width - nchar(visible_text)
+        if (padding_needed > 0) {
+          return(paste0(text, strrep(" ", padding_needed)))
+        } else {
+          return(text)
+        }
+      }
+
+      # Print header
+      cat(pad_string("Date", col_widths["Date"]), " | ",
+          pad_string("Type", col_widths["Type"]), " | ",
+          pad_string("Details", col_widths["Details"]), " | ",
+          pad_string("Activity", col_widths["Activity"]), "\n", sep = "")
+
+      # Print separator
+      cat(strrep("-", col_widths["Date"]), "-|-",
+          strrep("-", col_widths["Type"]), "-|-",
+          strrep("-", col_widths["Details"]), "-|-",
+          strrep("-", col_widths["Activity"]), "\n", sep = "")
+
+      # Print rows
+      for (i in seq_len(nrow(table_df))) {
+        cat(pad_string(table_df$Date[i], col_widths["Date"]), " | ",
+            pad_string(table_df$Type[i], col_widths["Type"]), " | ",
+            pad_string(table_df$Details[i], col_widths["Details"]), " | ",
+            pad_string(table_df$Activity[i], col_widths["Activity"]), "\n", sep = "")
+      }
+      cat("\n")
     }
-    cat("\n")
   }
   
-  if (total_removals > 0) {
-    cat(cli::style_bold("Removals:\n"))
-    for (i in seq_len(nrow(object$removals))) {
-      row <- object$removals[i, ]
-      cat(format_change("removal", row), "\n")
-    }
-    cat("\n")
-  }
-  
-  if (total_replacements > 0) {
-    cat(cli::style_bold("Replacements:\n"))
-    for (i in seq_len(nrow(object$replacements))) {
-      row <- object$replacements[i, ]
-      cat(format_change("replacement", row), "\n")
-    }
-    cat("\n")
-  }
-  
-  if (total_rate_changes > 0) {
-    cat(cli::style_bold("Rate changes:\n"))
-    for (i in seq_len(nrow(object$rate_changes))) {
-      row <- object$rate_changes[i, ]
-      cat(format_change("rate_change", row), "\n")
-    }
-    cat("\n")
-  }
+  # Print sections for each change type
+  print_change_section(object$additions, "Additions", "Addition")
+  print_change_section(object$removals, "Removals", "Removal") 
+  print_change_section(object$replacements, "Replacements", "Replacement")
+  print_change_section(object$rate_changes, "Rate changes", "Rate Change")
   
   if (total_changes == 0) {
     cat("No changes detected.\n")
