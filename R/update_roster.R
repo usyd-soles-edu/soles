@@ -13,6 +13,7 @@
 #' @importFrom glue glue
 #' @importFrom utils read.csv write.csv
 #' @import lgr
+#' @importFrom stringr str_extract
 #' @export
 update_roster <- function(current_df, previous_df = NULL, verbose = TRUE) {
   # Validate inputs
@@ -127,11 +128,11 @@ update_roster <- function(current_df, previous_df = NULL, verbose = TRUE) {
   
   additions <- full_join_df |> 
     filter(is.na(name_prev)) |> 
-    select(all_of(key_cols), name = name_curr, rate_code = rate_code_curr)
+    select(all_of(key_cols), name = name_curr, rate_code = rate_code_curr, subject_activitycode = subject_activitycode_curr)
   
   removals <- full_join_df |> 
     filter(is.na(name_curr)) |> 
-    select(all_of(key_cols), name = name_prev, rate_code = rate_code_prev)
+    select(all_of(key_cols), name = name_prev, rate_code = rate_code_prev, subject_activitycode = subject_activitycode_prev)
   
   common <- full_join_df |> 
     filter(!is.na(name_prev) & !is.na(name_curr))
@@ -142,14 +143,16 @@ update_roster <- function(current_df, previous_df = NULL, verbose = TRUE) {
            previous_name = name_prev,
            current_name = name_curr,
            previous_rate = rate_code_prev,
-           current_rate = rate_code_curr)
+           current_rate = rate_code_curr,
+           subject_activitycode = subject_activitycode_curr)
   
   rate_changes <- common |> 
     filter(name_prev == name_curr, rate_code_prev != rate_code_curr) |> 
     select(all_of(key_cols),
            name = name_prev,
            previous_rate = rate_code_prev,
-           current_rate = rate_code_curr)
+           current_rate = rate_code_curr,
+           subject_activitycode = subject_activitycode_curr)
 
   # Check if there are changes
   total_changes <- nrow(additions) + nrow(removals) + nrow(replacements) + nrow(rate_changes)
@@ -191,16 +194,19 @@ summary.roster_changes <- function(object, ...) {
   
   # Helper function to format a single change
   format_change <- function(change_type, row) {
-    week <- row$week
+    week <- sub("^w", "Wk ", row$week)
     day <- row$day_of_week
     time <- row$start_time
     role <- format_role(row$role)
+    lab <- row$lab
+    subject <- toupper(str_extract(row$subject_activitycode, "^[^-]+"))
+    activity_code <- str_extract(row$subject_activitycode, "(?<=-).*")
     
     switch(change_type,
-           "addition" = glue::glue("In {week}, {row$name} is added as {role} on {day} {time}"),
-           "removal" = glue::glue("In {week}, {row$name} is removed from {day} {time} ({role}) with no replacement"),
-           "replacement" = glue::glue("In {week}, {row$current_name} replaces {row$previous_name} on {day} {time} ({role})"),
-           "rate_change" = glue::glue("In {week}, {row$name}'s rate changed from {row$previous_rate} to {row$current_rate} on {day} {time} ({role})")
+           "addition" = glue::glue("In {week}, {row$name} is added as {role} in Lab {lab} on {day} {time} ({subject} Act. code {activity_code})"),
+           "removal" = glue::glue("In {week}, {row$name} is removed from Lab {lab} {day} {time} ({subject} Act. code {activity_code}) with no replacement ({role})"),
+           "replacement" = glue::glue("In {week}, {row$current_name} replaces {row$previous_name} in Lab {lab} on {day} {time} ({subject} Act. code {activity_code}) ({role})"),
+           "rate_change" = glue::glue("In {week}, {row$name}'s rate changed from {row$previous_rate} to {row$current_rate} in Lab {lab} on {day} {time} ({subject} Act. code {activity_code}) ({role})")
     )
   }
   
