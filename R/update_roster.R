@@ -183,11 +183,10 @@ update_roster <- function(current_df, previous_df = NULL, verbose = TRUE) {
     result
   }
 }
-
-
+  
 #' @export
 #' @method summary roster_changes
-summary.roster_changes <- function(object, ...) {
+summary.roster_changes <- function(object, ..., html = FALSE) {
   # Helper function to format role names
   format_role <- function(role) {
     ifelse(role == "sup", "Tutor", "Demonstrator")
@@ -203,6 +202,58 @@ summary.roster_changes <- function(object, ...) {
            "Replacement" = paste0(cli::style_strikethrough(cli::style_bold(cli::col_red(row$previous_name))), " → ", cli::style_bold(cli::col_blue(row$current_name)), " (", role, ")"),
            "Rate Change" = paste0(cli::style_bold(cli::col_blue(row$name)), " rate ", row$previous_rate, " → ", row$current_rate, " (", role, ")")
     )
+  }
+  
+  # Helper function to get HTML formatted details
+  get_details_html <- function(row, type) {
+    role <- format_role(row$role)
+    
+    switch(type,
+           "Addition" = paste0("<span style='color: blue; font-weight: bold;'>", row$name, "</span> added (", role, ")"),
+           "Removal" = paste0("<span style='color: blue; font-weight: bold;'>", row$name, "</span> removed (", role, ")"),
+           "Replacement" = paste0("<del style='color: red; font-weight: bold;'>", row$previous_name, "</del> &rarr; <span style='color: blue; font-weight: bold;'>", row$current_name, "</span> (", role, ")"),
+           "Rate Change" = paste0("<span style='color: blue; font-weight: bold;'>", row$name, "</span> rate ", row$previous_rate, " &rarr; ", row$current_rate, " (", role, ")")
+    )
+  }
+  
+  # Helper function to build HTML table for a change type
+  build_table_html <- function(changes_df, type_label) {
+    if (nrow(changes_df) == 0) return("")
+    
+    # Add type column and arrange by date
+    changes_with_type <- changes_df |> 
+      mutate(type = type_label) |> 
+      arrange(date)
+    
+    table_html <- ""
+    
+    # Group by week
+    weeks <- unique(changes_with_type$week)
+    for (wk in sort(weeks)) {
+      wk_changes <- changes_with_type |> filter(week == wk)
+      table_html <- paste0(table_html, "<h3>Wk ", sub('^w', '', wk), "</h3>")
+      table_html <- paste0(table_html, "<table border='1' style='border-collapse: collapse; width: 100%;'>")
+      table_html <- paste0(table_html, "<tr style='background-color: #f0f0f0;'><th style='padding: 8px;'>Date</th><th style='padding: 8px;'>Type</th><th style='padding: 8px;'>Details</th><th style='padding: 8px;'>Activity</th></tr>")
+      
+      for (i in seq_len(nrow(wk_changes))) {
+        row <- wk_changes[i, ]
+        details <- get_details_html(row, row$type)
+        
+        subject <- toupper(str_extract(row$subject_activitycode, "^[^-]+"))
+        activity_code <- str_extract(row$subject_activitycode, "(?<=-).*")
+        lab_num <- sub("Lab ", "", row$lab)
+        start_hour <- as.integer(substr(row$start_time, 1, 2))
+        end_hour <- start_hour + 3
+        start_12 <- ifelse(start_hour > 12, start_hour - 12, start_hour)
+        end_12 <- ifelse(end_hour > 12, end_hour - 12, end_hour)
+        time_str <- paste0(start_12, "-", end_12, "pm")
+        activity <- paste0(subject, " <strong>", sprintf("%02d", as.integer(activity_code)), "</strong>: ", lab_num, " ", row$day_of_week, " ", time_str)
+        
+        table_html <- paste0(table_html, "<tr><td style='padding: 8px;'>", format(row$date, "%Y-%m-%d"), "</td><td style='padding: 8px;'>", row$type, "</td><td style='padding: 8px;'>", details, "</td><td style='padding: 8px;'>", activity, "</td></tr>")
+      }
+      table_html <- paste0(table_html, "</table><br>")
+    }
+    return(table_html)
   }
   
   # Calculate totals
@@ -221,6 +272,40 @@ summary.roster_changes <- function(object, ...) {
   cat(" Replacements: ", total_replacements, " |")
   cat(" Rate changes: ", total_rate_changes, " ")
   cat("\n\n")
+  
+  # Generate HTML if requested
+  if (html) {
+    # Get logs directory from source file
+    source_file <- attr(object$additions, "source_file")
+    if (!is.null(source_file)) {
+      logs_dir <- file.path(dirname(source_file), "logs")
+      if (!dir.exists(logs_dir)) {
+        dir.create(logs_dir, recursive = TRUE)
+      }
+      timestamp <- format(Sys.time(), "%Y-%m-%d-%H%M%S")
+      filename <- glue::glue("roster_changes_summary-{timestamp}.html")
+      html_path <- file.path(logs_dir, filename)
+    } else {
+      # Fallback to current directory
+      timestamp <- format(Sys.time(), "%Y-%m-%d-%H%M%S")
+      filename <- glue::glue("roster_changes_summary-{timestamp}.html")
+      html_path <- filename
+    }
+    
+    html_content <- paste0(
+      "<!DOCTYPE html><html><head><title>Roster Changes Summary</title></head><body>",
+      "<h1>Roster Changes Summary</h1>",
+      "<p><strong>Total changes:</strong> ", total_changes, " | <strong>Additions:</strong> ", total_additions, " | <strong>Removals:</strong> ", total_removals, " | <strong>Replacements:</strong> ", total_replacements, " | <strong>Rate changes:</strong> ", total_rate_changes, "</p>",
+      if (total_additions > 0) paste0("<h2>Additions</h2>", build_table_html(object$additions, "Addition")) else "",
+      if (total_removals > 0) paste0("<h2>Removals</h2>", build_table_html(object$removals, "Removal")) else "",
+      if (total_replacements > 0) paste0("<h2>Replacements</h2>", build_table_html(object$replacements, "Replacement")) else "",
+      if (total_rate_changes > 0) paste0("<h2>Rate changes</h2>", build_table_html(object$rate_changes, "Rate Change")) else "",
+      if (total_changes == 0) "<p>No changes detected.</p>" else "",
+      "</body></html>"
+    )
+    writeLines(html_content, html_path)
+    message(glue::glue("HTML summary saved to '{html_path}'"))
+  }
   
   # Helper function to print tables for a specific change type
   print_change_section <- function(changes_df, section_title, type_label) {
