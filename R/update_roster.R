@@ -155,6 +155,12 @@ update_roster <- function(current_df, previous_df = NULL, verbose = TRUE) {
            current_rate = rate_code_curr,
            subject_activitycode = subject_activitycode_curr)
 
+  # Preserve attributes for summary
+  attr(additions, "source_file") <- attr(current_df, "source_file")
+  attr(removals, "source_file") <- attr(current_df, "source_file")
+  attr(replacements, "source_file") <- attr(current_df, "source_file")
+  attr(rate_changes, "source_file") <- attr(current_df, "source_file")
+
   # Check if there are changes
   total_changes <- nrow(additions) + nrow(removals) + nrow(replacements) + nrow(rate_changes)
   
@@ -303,8 +309,35 @@ summary.roster_changes <- function(object, ..., html = FALSE) {
       if (total_changes == 0) "<p>No changes detected.</p>" else "",
       "</body></html>"
     )
-    writeLines(html_content, html_path)
-    message(glue::glue("HTML summary saved to '{html_path}'"))
+    
+    # Check if running in RStudio
+    if (requireNamespace("rstudioapi", quietly = TRUE) && rstudioapi::isAvailable()) {
+      # Save to temp file for viewer
+      temp_file <- tempfile(fileext = ".html")
+      writeLines(html_content, temp_file)
+      rstudioapi::viewer(temp_file)
+      message("HTML summary displayed in RStudio viewer.")
+    } else {
+      writeLines(html_content, html_path)
+      # Helper function to get relative path
+      get_relative_path <- function(absolute_path) {
+        tryCatch({
+          wd <- getwd()
+          # Normalize paths to forward slashes for comparison
+          norm_wd <- gsub("\\\\", "/", wd)
+          norm_path <- gsub("\\\\", "/", absolute_path)
+          
+          # If path is within working directory, make it relative
+          if (grepl(paste0("^", norm_wd), norm_path)) {
+            gsub(paste0("^", norm_wd, "/?"), "", norm_path)
+          } else {
+            absolute_path
+          }
+        }, error = function(e) absolute_path)
+      }
+      relative_path <- get_relative_path(html_path)
+      message(glue::glue("HTML summary saved to '{relative_path}'. Open in your editor for preview."))
+    }
   }
   
   # Helper function to print tables for a specific change type
