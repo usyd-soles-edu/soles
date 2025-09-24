@@ -120,9 +120,9 @@ update_roster <- function(current_df, previous_df = NULL, verbose = TRUE) {
   prev_removed <- prev_count - nrow(previous_df)
   curr_removed <- curr_count - nrow(current_df)
   
-  if (prev_removed > 0 || curr_removed > 0) {
-    if(verbose) lgr$info(glue::glue("Data preprocessing: removed {prev_removed} duplicate entries from previous, {curr_removed} from current roster"))
-  }
+  # if (prev_removed > 0 || curr_removed > 0) {
+  #   if(verbose) lgr$info(glue::glue("Data preprocessing: removed {prev_removed} duplicate entries from previous, {curr_removed} from current roster"))
+  # }
 
   # Compute changes in one pass using full_join for efficiency
   full_join_df <- full_join(previous_df, current_df, by = key_cols, suffix = c("_prev", "_curr"))
@@ -200,7 +200,7 @@ summary.roster_changes <- function(object, ...) {
     switch(type,
            "Addition" = paste0(cli::style_bold(cli::col_blue(row$name)), " added (", role, ")"),
            "Removal" = paste0(cli::style_bold(cli::col_blue(row$name)), " removed (", role, ")"),
-           "Replacement" = paste0(cli::style_bold(cli::col_blue(row$current_name)), " ← ", cli::style_bold(cli::col_red(row$previous_name)), " (Demo)"),
+           "Replacement" = paste0(cli::style_strikethrough(cli::style_bold(cli::col_red(row$previous_name))), " → ", cli::style_bold(cli::col_blue(row$current_name)), " (", role, ")"),
            "Rate Change" = paste0(cli::style_bold(cli::col_blue(row$name)), " rate ", row$previous_rate, " → ", row$current_rate, " (", role, ")")
     )
   }
