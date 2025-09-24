@@ -103,7 +103,7 @@ update_roster <- function(current_df, previous_df = NULL, verbose = TRUE) {
     previous_df <- read.csv(latest_file, stringsAsFactors = FALSE, 
                            colClasses = c("character", "Date", "character", "character", 
                                         "character", "character", "character", "character", 
-                                        "integer", "character"))
+                                        "integer", "character", "character"))
     # Ensure date is Date
     previous_df$date <- as.Date(previous_df$date)
   } else {

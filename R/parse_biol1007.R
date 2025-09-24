@@ -91,5 +91,19 @@ parse_biol1007_roster <- function(path, verbose = TRUE) {
     ) |>
     select(-c(surname, given_name, new))
   
+  # Read and process labs data from third sheet
+  labs_data <- read_excel(path, sheet = 3, skip = 8) |>
+    clean_names() |>
+    mutate(
+      start_time = format(start_time, "%H:%M"),
+      lab = substr(part_location, nchar(part_location) - 2, nchar(part_location)),
+      subject = tolower(str_extract(subject_code, "^[^-]+")),
+      subject_activitycode = paste(subject, short_code, sep = "-")
+    ) |>
+    select(day_of_week, start_time, lab, subject_activitycode)
+  
+  # Join labs data to add subject_activitycode
+  result <- left_join(result, labs_data, by = c("day_of_week", "start_time", "lab"))
+  
   return(result)
 }
