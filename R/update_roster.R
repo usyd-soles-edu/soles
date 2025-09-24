@@ -14,6 +14,7 @@
 #' @importFrom utils read.csv write.csv
 #' @import lgr
 #' @importFrom stringr str_extract
+#' @import cli
 #' @export
 update_roster <- function(current_df, previous_df = NULL, verbose = TRUE) {
   # Validate inputs
@@ -189,7 +190,7 @@ update_roster <- function(current_df, previous_df = NULL, verbose = TRUE) {
 summary.roster_changes <- function(object, ...) {
   # Helper function to format role names
   format_role <- function(role) {
-    ifelse(role == "sup", "Supervisor", role)
+    ifelse(role == "sup", "Supervisor", "Demonstrator")
   }
   
   # Helper function to format a single change
@@ -202,11 +203,20 @@ summary.roster_changes <- function(object, ...) {
     subject <- toupper(str_extract(row$subject_activitycode, "^[^-]+"))
     activity_code <- str_extract(row$subject_activitycode, "(?<=-).*")
     
+    date_str <- format(row$date, "%Y-%m-%d")
+    lab_num <- sub("Lab ", "", lab)
+    start_hour <- as.integer(substr(time, 1, 2))
+    end_hour <- start_hour + 3
+    start_12 <- ifelse(start_hour > 12, start_hour - 12, start_hour)
+    end_12 <- ifelse(end_hour > 12, end_hour - 12, end_hour)
+    time_str <- paste0(start_12, "-", end_12, "pm")
+    activity_code_02 <- sprintf("%02d", as.integer(activity_code))
+    
     switch(change_type,
-           "addition" = glue::glue("In {week}, {row$name} is added as {role} in Lab {lab} on {day} {time} ({subject} Act. code {activity_code})"),
-           "removal" = glue::glue("In {week}, {row$name} is removed from Lab {lab} {day} {time} ({subject} Act. code {activity_code}) with no replacement ({role})"),
-           "replacement" = glue::glue("In {week}, {row$current_name} replaces {row$previous_name} in Lab {lab} on {day} {time} ({subject} Act. code {activity_code}) ({role})"),
-           "rate_change" = glue::glue("In {week}, {row$name}'s rate changed from {row$previous_rate} to {row$current_rate} in Lab {lab} on {day} {time} ({subject} Act. code {activity_code}) ({role})")
+           "addition" = paste0("In ", week, " (", date_str, ") ", cli::style_bold(cli::col_blue(row$name)), " is added (", role, ") for ", subject, " Activity ", activity_code_02, " (", lab_num, " ", day, " ", time_str, ")"),
+           "removal" = paste0("In ", week, " (", date_str, ") ", cli::style_bold(cli::col_blue(row$name)), " is removed (", role, ") for ", subject, " Activity ", activity_code_02, " (", lab_num, " ", day, " ", time_str, ")"),
+           "replacement" = paste0("In ", week, " (", date_str, ") ", cli::style_bold(cli::col_blue(row$current_name)), " replaces ", cli::style_bold(cli::col_red(row$previous_name)), " (Demonstrator) for ", subject, " Activity ", activity_code_02, " (", lab_num, " ", day, " ", time_str, ")"),
+           "rate_change" = paste0("In ", week, " (", date_str, ") ", cli::style_bold(cli::col_blue(row$name)), "'s rate changed from ", row$previous_rate, " to ", row$current_rate, " (", role, ") for ", subject, " Activity ", activity_code_02, " (", lab_num, " ", day, " ", time_str, ")")
     )
   }
   
@@ -217,9 +227,15 @@ summary.roster_changes <- function(object, ...) {
   total_rate_changes <- nrow(object$rate_changes)
   total_changes <- total_additions + total_removals + total_replacements + total_rate_changes
   
+  # Sort changes by date
+  object$additions <- object$additions |> arrange(date)
+  object$removals <- object$removals |> arrange(date)
+  object$replacements <- object$replacements |> arrange(date)
+  object$rate_changes <- object$rate_changes |> arrange(date)
+  
   # Print summary header
-  cat("\nRoster Changes Summary\n")
-  cat("======================\n")
+  cat(cli::style_bold("\nRoster Changes Summary\n"))
+  cat(cli::style_bold("======================\n"))
   cat(glue::glue("Total changes: {total_changes} |"))
   cat(glue::glue(" Additions: {total_additions} |"))
   cat(glue::glue(" Removals: {total_removals} |"))
@@ -229,7 +245,7 @@ summary.roster_changes <- function(object, ...) {
   
   # Print details for each type
   if (total_additions > 0) {
-    cat("Additions:\n")
+    cat(cli::style_bold("Additions:\n"))
     for (i in seq_len(nrow(object$additions))) {
       row <- object$additions[i, ]
       cat(format_change("addition", row), "\n")
@@ -238,7 +254,7 @@ summary.roster_changes <- function(object, ...) {
   }
   
   if (total_removals > 0) {
-    cat("Removals:\n")
+    cat(cli::style_bold("Removals:\n"))
     for (i in seq_len(nrow(object$removals))) {
       row <- object$removals[i, ]
       cat(format_change("removal", row), "\n")
@@ -247,7 +263,7 @@ summary.roster_changes <- function(object, ...) {
   }
   
   if (total_replacements > 0) {
-    cat("Replacements:\n")
+    cat(cli::style_bold("Replacements:\n"))
     for (i in seq_len(nrow(object$replacements))) {
       row <- object$replacements[i, ]
       cat(format_change("replacement", row), "\n")
@@ -256,7 +272,7 @@ summary.roster_changes <- function(object, ...) {
   }
   
   if (total_rate_changes > 0) {
-    cat("Rate changes:\n")
+    cat(cli::style_bold("Rate changes:\n"))
     for (i in seq_len(nrow(object$rate_changes))) {
       row <- object$rate_changes[i, ]
       cat(format_change("rate_change", row), "\n")
