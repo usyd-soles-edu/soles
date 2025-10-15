@@ -64,7 +64,7 @@ update_roster <- function(current_df, previous_df = NULL, verbose = TRUE) {
       dir.create(logs_dir, recursive = TRUE)
     }
     unit <- attr(df, "unit")
-    timestamp <- format(Sys.time(), "%Y-%m-%d-%H%M%S")
+    timestamp <- format(attr(df, "file_mtime"), "%Y-%m-%d-%H%M%S")
     filename <- glue::glue("{unit}-{timestamp}.csv")
     filepath <- file.path(logs_dir, filename)
     # Add roster_date column for future reference
