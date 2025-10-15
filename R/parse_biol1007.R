@@ -13,8 +13,10 @@
 #' @import lgr
 #' @export
 parse_biol1007_roster <- function(path, verbose = TRUE) {
-  if(verbose) lgr$info("Processing BIOL1007 roster...")
-  
+  if (verbose) {
+    lgr$info("Processing BIOL1007 roster...")
+  }
+
   # Read and clean the roster data
   raw_data <- suppressMessages(
     read_excel(path, skip = 4)
@@ -46,13 +48,13 @@ parse_biol1007_roster <- function(path, verbose = TRUE) {
     ) |>
     filter(!if_any(-date, ~ . == "NA")) |>
     select(week, date, lab, day_of_week, start_time, role, name)
-  
+
   # Calculate rates for staff based on role and weekly session order
   # Process demonstrators - all get "demo" rate
   demonstrators <- raw_data |>
     filter(role == "demo") |>
     mutate(rate = "demo")
-  
+
   # Process supervisors - first session each week gets "tutorial", subsequent get "r_tutorial"
   supervisors <- raw_data |>
     filter(role == "sup") |>
@@ -68,15 +70,15 @@ parse_biol1007_roster <- function(path, verbose = TRUE) {
     ) |>
     ungroup() |>
     select(-session_order)
-  
+
   # Combine results
   rates_data <- dplyr::bind_rows(demonstrators, supervisors) |>
     arrange(name, week, date, day_of_week, start_time)
-  
+
   # Assign casual rates based on staff qualifications and role rates
   staff_data <- read_excel(path, sheet = "staff") |>
     clean_names()
-  
+
   result <- left_join(rates_data, staff_data, by = c("name" = "label")) |>
     mutate(
       rate_code = case_when(
@@ -90,20 +92,32 @@ parse_biol1007_roster <- function(path, verbose = TRUE) {
       )
     ) |>
     select(-c(surname, given_name, new))
-  
+
   # Read and process labs data from third sheet
   labs_data <- read_excel(path, sheet = 3, skip = 8) |>
     clean_names() |>
     mutate(
-      start_time = format(start_time, "%H:%M"),
-      lab = substr(part_location, nchar(part_location) - 2, nchar(part_location)),
+      start_time = if (is.POSIXct(start_time)) {
+        format(start_time, "%H:%M")
+      } else {
+        start_time
+      },
+      lab = substr(
+        part_location,
+        nchar(part_location) - 2,
+        nchar(part_location)
+      ),
       subject = tolower(str_extract(subject_code, "^[^-]+")),
       subject_activitycode = paste(subject, short_code, sep = "-")
     ) |>
     select(day_of_week, start_time, lab, subject_activitycode)
-  
+
   # Join labs data to add subject_activitycode
-  result <- left_join(result, labs_data, by = c("day_of_week", "start_time", "lab"))
-  
+  result <- left_join(
+    result,
+    labs_data,
+    by = c("day_of_week", "start_time", "lab")
+  )
+
   return(result)
 }

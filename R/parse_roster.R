@@ -19,43 +19,56 @@ parse_roster <- function(path, unit, output_path = FALSE, verbose = TRUE) {
   if (!file.exists(path)) {
     stop("File not found: ", path)
   }
-  
+
   # Convert unit to uppercase for consistency
   unit <- toupper(unit)
-  
+
   # Helper function to get relative path
   get_relative_path <- function(absolute_path) {
-    tryCatch({
-      wd <- getwd()
-      # Normalize paths to forward slashes for comparison
-      norm_wd <- gsub("\\\\", "/", wd)
-      norm_path <- gsub("\\\\", "/", absolute_path)
-      
-      # If path is within working directory, make it relative
-      if (grepl(paste0("^", norm_wd), norm_path)) {
-        gsub(paste0("^", norm_wd, "/?"), "", norm_path)
-      } else {
-        absolute_path
-      }
-    }, error = function(e) absolute_path)
+    tryCatch(
+      {
+        wd <- getwd()
+        # Normalize paths to forward slashes for comparison
+        norm_wd <- gsub("\\\\", "/", wd)
+        norm_path <- gsub("\\\\", "/", absolute_path)
+
+        # If path is within working directory, make it relative
+        if (grepl(paste0("^", norm_wd), norm_path)) {
+          gsub(paste0("^", norm_wd, "/?"), "", norm_path)
+        } else {
+          absolute_path
+        }
+      },
+      error = function(e) absolute_path
+    )
   }
-  
+
   relative_path <- get_relative_path(path)
-  if (verbose) lgr$info(glue::glue("Parsing roster for {unit} from '{relative_path}'..."))
-  
+  if (verbose) {
+    lgr$info(glue::glue("Parsing roster for {unit} from '{relative_path}'..."))
+  }
+
   # Route to unit-specific parser
-  result <- switch(unit,
+  result <- switch(
+    unit,
     "BIOL1007" = parse_biol1007_roster(path, verbose = verbose),
     # Add more units as needed
     stop("Unit not supported: ", unit)
   )
-  
+
   # Add source file attribute
   attr(result, "source_file") <- path
-  
+
   # Add unit attribute for comparison
   attr(result, "unit") <- unit
-  
+
+  # Add roster date attribute
+  roster_date <- stringr::str_extract(basename(path), "\\d{4}-\\d{2}-\\d{2}-\\d{4}")
+  attr(result, "roster_date") <- roster_date
+
+  # Add file modification time attribute
+  attr(result, "file_mtime") <- file.info(path)$mtime
+
   # Write to CSV if output_path is specified or NULL (default behavior)
   if (identical(output_path, FALSE)) {
     if (verbose) lgr$info("Processing complete and saved in memory...")
@@ -63,39 +76,65 @@ parse_roster <- function(path, unit, output_path = FALSE, verbose = TRUE) {
     # Create logs directory in the same directory as the input file
     input_dir <- dirname(path)
     logs_dir <- file.path(input_dir, "logs")
-    
+
     # Get relative path for logs directory
     relative_logs_dir <- get_relative_path(logs_dir)
-    
+
     if (!dir.exists(logs_dir)) {
-      if (verbose) lgr$info(glue::glue("Creating logs directory at '{relative_logs_dir}'..."))
+      if (verbose) {
+        lgr$info(glue::glue(
+          "Creating logs directory at '{relative_logs_dir}'..."
+        ))
+      }
       dir.create(logs_dir, recursive = TRUE)
     }
-    
+
     # Create timestamp
     timestamp <- format(Sys.time(), "%Y-%m-%d-%H%M%S")
     filename <- glue::glue("{unit}-{timestamp}.csv")
     output_path <- file.path(logs_dir, filename)
-  if (verbose) lgr$info(glue::glue("Generated output filename: '{filename}'..."))
-    
+    if (verbose) {
+      lgr$info(glue::glue("Generated output filename: '{filename}'..."))
+    }
+
     # Get relative path for output file
     relative_output_path <- get_relative_path(output_path)
-    
+
     # Write result to CSV
-  if (verbose) lgr$info(glue::glue("Writing parsed roster to '{relative_output_path}'..."))
+    if (verbose) {
+      lgr$info(glue::glue(
+        "Writing parsed roster to '{relative_output_path}'..."
+      ))
+    }
     utils::write.csv(result, output_path, row.names = FALSE)
-  if (verbose) lgr$info(glue::glue("Successfully wrote parsed roster to '{relative_output_path}'..."))
+    if (verbose) {
+      lgr$info(glue::glue(
+        "Successfully wrote parsed roster to '{relative_output_path}'..."
+      ))
+    }
   } else {
     # Get relative path for output file
     relative_output_path <- get_relative_path(output_path)
-    
-    if (verbose) lgr$info(glue::glue("Using specified output path: '{relative_output_path}'..."))
-    
+
+    if (verbose) {
+      lgr$info(glue::glue(
+        "Using specified output path: '{relative_output_path}'..."
+      ))
+    }
+
     # Write result to CSV
-  if (verbose) lgr$info(glue::glue("Writing parsed roster to '{relative_output_path}'..."))
+    if (verbose) {
+      lgr$info(glue::glue(
+        "Writing parsed roster to '{relative_output_path}'..."
+      ))
+    }
     utils::write.csv(result, output_path, row.names = FALSE)
-  if (verbose) lgr$info(glue::glue("Successfully wrote parsed roster to '{relative_output_path}'..."))
+    if (verbose) {
+      lgr$info(glue::glue(
+        "Successfully wrote parsed roster to '{relative_output_path}'..."
+      ))
+    }
   }
-  
+
   return(result)
 }
