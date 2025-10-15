@@ -464,8 +464,8 @@ summary.roster_changes <- function(object, ..., html = FALSE) {
     cat("Comparing roster from ", format_datetime(previous_date), " to ", format_datetime(current_date), "\n\n")
   }
 
-  # Generate HTML if requested
-  if (html) {
+  # Generate HTML if requested and there are changes
+  if (html && total_changes > 0) {
     # Get logs directory from source file
     source_file <- attr(object$additions, "source_file")
     if (!is.null(source_file)) {
