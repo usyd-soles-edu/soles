@@ -70,7 +70,6 @@ update_roster <- function(current_df, previous_df = NULL, verbose = TRUE) {
     # Add roster_date column for future reference
     df_to_save <- df
     df_to_save$roster_date <- attr(df, "roster_date")
-    df_to_save$file_mtime <- attr(df, "file_mtime")
     write.csv(df_to_save, filepath, row.names = FALSE)
     if (verbose) lgr$info(glue::glue("{message}: {filename}"))
   }
@@ -141,15 +140,6 @@ update_roster <- function(current_df, previous_df = NULL, verbose = TRUE) {
       previous_df$roster_date <- NULL
     } else {
       attr(previous_df, "roster_date") <- NULL
-    }
-    # Set file_mtime attribute if column exists
-    if ("file_mtime" %in% names(previous_df)) {
-      attr(previous_df, "file_mtime") <- as.POSIXct(unique(
-        previous_df$file_mtime
-      ))
-      previous_df$file_mtime <- NULL
-    } else {
-      attr(previous_df, "file_mtime") <- NULL
     }
   } else {
     if (verbose) lgr$info("Comparing provided roster data frames")
@@ -262,8 +252,6 @@ update_roster <- function(current_df, previous_df = NULL, verbose = TRUE) {
   # Add roster dates for summary
   attr(result, "previous_roster_date") <- attr(previous_df, "roster_date")
   attr(result, "current_roster_date") <- attr(current_df, "roster_date")
-  attr(result, "previous_file_mtime") <- attr(previous_df, "file_mtime")
-  attr(result, "current_file_mtime") <- attr(current_df, "file_mtime")
 
   if (total_changes == 0) {
     invisible(result)
