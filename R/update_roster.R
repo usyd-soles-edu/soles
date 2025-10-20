@@ -65,12 +65,9 @@ update_roster <- function(current_df, previous_df = NULL, verbose = TRUE) {
     }
     unit <- attr(df, "unit")
     timestamp <- format(Sys.time(), "%Y-%m-%d-%H%M%S")
-    filename <- glue::glue("{unit}-{timestamp}.csv")
+    filename <- glue::glue("{unit}-{attr(df, 'roster_date')}-{timestamp}.csv")
     filepath <- file.path(logs_dir, filename)
-    # Add roster_date column for future reference
-    df_to_save <- df
-    df_to_save$roster_date <- attr(df, "roster_date")
-    write.csv(df_to_save, filepath, row.names = FALSE)
+    write.csv(df, filepath, row.names = FALSE)
     if (verbose) lgr$info(glue::glue("{message}: {filename}"))
   }
 
@@ -113,14 +110,23 @@ update_roster <- function(current_df, previous_df = NULL, verbose = TRUE) {
       return(invisible(NULL))
     }
 
-    # Find the latest by timestamp in filename
-    timestamps <- sapply(roster_files, function(f) {
+    # Find the latest by roster_date in filename
+    roster_dates <- sapply(roster_files, function(f) {
       basename_f <- basename(f)
-      # Extract timestamp from filename like BIOL1007-2025-09-22-204839.csv
-      ts_str <- sub(paste0("^", unit, "-(.*)\\.csv$"), "\\1", basename_f)
-      as.POSIXct(ts_str, format = "%Y-%m-%d-%H%M%S")
+      # Extract roster_date from filename like BIOL1007-2025-10-09-1121-2025-10-20-141439.csv
+      rd_str <- sub(paste0("^", unit, "-(.*)-.*\\.csv$"), "\\1", basename_f)
+      if (rd_str == basename_f) return(NA)  # no match, old format
+      # Convert to POSIXct for proper comparison
+      as.POSIXct(rd_str, format = "%Y-%m-%d-%H%M")
     })
-    latest_file <- roster_files[which.max(timestamps)]
+    # Filter out invalid files
+    valid_indices <- !is.na(roster_dates)
+    roster_files <- roster_files[valid_indices]
+    roster_dates <- roster_dates[valid_indices]
+    if (length(roster_files) == 0) {
+      stop("No valid previous roster files found")
+    }
+    latest_file <- roster_files[which.max(roster_dates)]
 
     if (verbose) {
       lgr$info(glue::glue("Comparing {unit} roster to previous version"))
@@ -134,13 +140,10 @@ update_roster <- function(current_df, previous_df = NULL, verbose = TRUE) {
     previous_df$subject_activitycode <- as.character(
       previous_df$subject_activitycode
     )
-    # Set roster_date attribute if column exists
-    if ("roster_date" %in% names(previous_df)) {
-      attr(previous_df, "roster_date") <- unique(previous_df$roster_date)
-      previous_df$roster_date <- NULL
-    } else {
-      attr(previous_df, "roster_date") <- NULL
-    }
+    # Set roster_date attribute from filename
+    basename_f <- basename(latest_file)
+    roster_date_str <- sub(paste0("^", unit, "-(.*)-.*\\.csv$"), "\\1", basename_f)
+    attr(previous_df, "roster_date") <- roster_date_str
   } else {
     if (verbose) lgr$info("Comparing provided roster data frames")
   }
