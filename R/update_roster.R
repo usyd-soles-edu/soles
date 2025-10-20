@@ -64,7 +64,7 @@ update_roster <- function(current_df, previous_df = NULL, verbose = TRUE) {
       dir.create(logs_dir, recursive = TRUE)
     }
     unit <- attr(df, "unit")
-    timestamp <- format(attr(df, "file_mtime"), "%Y-%m-%d-%H%M%S")
+    timestamp <- format(Sys.time(), "%Y-%m-%d-%H%M%S")
     filename <- glue::glue("{unit}-{timestamp}.csv")
     filepath <- file.path(logs_dir, filename)
     # Add roster_date column for future reference
@@ -441,17 +441,6 @@ summary.roster_changes <- function(object, ..., html = FALSE) {
   cat(" Rate changes: ", total_rate_changes, " ")
   cat("\n\n")
 
-  # Add comparison dates
-  previous_date <- attr(object, "previous_roster_date")
-  current_date <- attr(object, "current_roster_date")
-  # Format dates to include time nicely
-  format_datetime <- function(dt) {
-    stringr::str_replace(dt, "-(\\d{2})(\\d{2})$", " \\1:\\2")
-  }
-  if (!is.null(previous_date) && !is.null(current_date)) {
-    cat("Comparing roster from ", format_datetime(previous_date), " to ", format_datetime(current_date), "\n\n")
-  }
-
   # Generate HTML if requested and there are changes
   if (html && total_changes > 0) {
     # Get logs directory from source file
@@ -463,11 +452,15 @@ summary.roster_changes <- function(object, ..., html = FALSE) {
       }
       # Get unit and dates for filename
       unit <- attr(object, "unit")
+      previous_date <- attr(object, "previous_roster_date")
+      current_date <- attr(object, "current_roster_date")
       filename <- paste0(tolower(unit), "-", previous_date, "-to-", current_date, ".html")
       html_path <- file.path(logs_dir, filename)
     } else {
       # Fallback to current directory
       unit <- attr(object, "unit")
+      previous_date <- attr(object, "previous_roster_date")
+      current_date <- attr(object, "current_roster_date")
       filename <- paste0(tolower(unit), "-", previous_date, "-to-", current_date, ".html")
       html_path <- filename
     }
@@ -486,17 +479,6 @@ summary.roster_changes <- function(object, ..., html = FALSE) {
       " | <strong>Rate changes:</strong> ",
       total_rate_changes,
       "</p>",
-      if (!is.null(previous_date) && !is.null(current_date)) {
-        paste0(
-          "<p><strong>Comparing roster from</strong> ",
-          format_datetime(previous_date),
-          " <strong>to</strong> ",
-          format_datetime(current_date),
-          "</p>"
-        )
-      } else {
-        ""
-      },
       if (total_additions > 0) {
         paste0(
           "<h2>Additions</h2>",
