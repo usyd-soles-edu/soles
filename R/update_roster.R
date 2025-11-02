@@ -110,23 +110,26 @@ update_roster <- function(current_df, previous_df = NULL, verbose = TRUE) {
       return(invisible(NULL))
     }
 
-    # Find the latest by roster_date in filename
-    roster_dates <- sapply(roster_files, function(f) {
+    # Find the latest by sorting filenames (they include dates in ISO format)
+    # Filter out files that don't match the expected format
+    valid_files <- sapply(roster_files, function(f) {
       basename_f <- basename(f)
-      # Extract roster_date from filename like BIOL1007-2025-10-09-1121-2025-10-20-141439.csv
-      rd_str <- sub(paste0("^", unit, "-(.*)-.*\\.csv$"), "\\1", basename_f)
-      if (rd_str == basename_f) return(NA)  # no match, old format
-      # Convert to POSIXct for proper comparison
-      as.POSIXct(rd_str, format = "%Y-%m-%d-%H%M")
+      grepl(paste0("^", unit, "-.*-.*\\.csv$"), basename_f)
     })
-    # Filter out invalid files
-    valid_indices <- !is.na(roster_dates)
-    roster_files <- roster_files[valid_indices]
-    roster_dates <- roster_dates[valid_indices]
+    roster_files <- roster_files[valid_files]
     if (length(roster_files) == 0) {
-      stop("No valid previous roster files found")
+      if (verbose) {
+        lgr$info(glue::glue(
+          "No previous roster found for {unit} - saving current as baseline"
+        ))
+      }
+      # Save current roster as baseline
+      save_roster(current_df, logs_dir, "Baseline roster saved")
+      return(invisible(NULL))
     }
-    latest_file <- roster_files[which.max(roster_dates)]
+    # Sort by filename (ascending, latest date last)
+    sorted_files <- sort(roster_files)
+    latest_file <- sorted_files[length(sorted_files)]
 
     if (verbose) {
       lgr$info(glue::glue("Comparing {unit} roster to previous version"))
