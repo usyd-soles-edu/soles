@@ -17,12 +17,12 @@
 #' @examples
 #' \dontrun{
 #' # Scan current directory
-#' files <- find_files(".")
+#' files <- find_docs(".")
 #'
 #' # Show detected file types
 #' table(files$type)
 #'
-#' # List unrecognized files
+#' # List unrecognised files
 #' subset(files, type == "unknown")
 #' }
 #' @export
@@ -102,60 +102,4 @@ find_docs <- function(path = NULL) {
     select(type, path, modified)
 
   return(out)
-}
-
-#' Detect Canvas file format
-#'
-#' @param cols Character vector of column names
-#' @return Logical indicating if columns match Canvas pattern
-detect_canvas <- function(cols) {
-  required_cols <- c("SIS User ID", "SIS Login ID", "Section")
-  all(required_cols %in% cols)
-}
-
-#' Detect Gradescope file format
-#'
-#' @param cols Character vector of column names
-#' @return Logical indicating if columns match Gradescope pattern
-detect_gradescope <- function(cols) {
-  required_cols <- c("First Name", "Last Name", "SID", "Email", "Sections")
-  all(required_cols %in% cols)
-}
-
-#' Detect Special Considerations file format
-#'
-#' @param cols Character vector of column names
-#' @return Logical indicating if columns match Special Considerations pattern
-detect_spec_cons <- function(cols) {
-  # clean up column names
-  cols <- tolower(cols)
-  required_cols <- c("number", "state", "classification")
-  all(required_cols %in% cols)
-}
-
-#' Detect Academic Plans file format
-#'
-#' @param cols Character vector of column names
-#' @return Logical indicating if columns match Academic Plans pattern
-detect_academic_plans <- function(cols) {
-  patterns <- c(
-    ".*Category.*",
-    ".*Assessment Adjustment.*",
-    ".*Exam Adjustment.*"
-  )
-  all(sapply(patterns, function(pattern) {
-    any(grepl(pattern, cols, ignore.case = TRUE))
-  }))
-}
-
-#' Detect SRES file format
-#'
-#' @param cols Character vector of column names
-#' @return Logical indicating if columns match SRES pattern
-detect_sres <- function(cols) {
-  required_cols <- c(
-    "Preferred name", "Given names", "Surname", "SID",
-    "Email", "Username"
-  )
-  all(required_cols %in% cols)
 }

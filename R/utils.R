@@ -56,7 +56,7 @@ match_assessments <- function(master, marks) {
   # Filter out 0% weighted items from marks
   valid_marks <- marks[!is.na(weights) & weights > 0, ]
 
-  # Initialize results vector
+  # Initialise results vector
   n_master <- nrow(master)
   n_marks <- nrow(valid_marks)
   matches <- integer(n_master)
@@ -103,20 +103,6 @@ match_assessments <- function(master, marks) {
 }
 
 
-#' Set logging level
-#'
-#' @param verbose If `TRUE`, set log level to INFO, otherwise set to SUCCESS.
-#' @return Nothing
-#' @importFrom logger log_threshold INFO SUCCESS
-#' @export
-set_log_level <- function(verbose = FALSE) {
-  if (verbose) {
-    logger::log_threshold(logger::INFO)
-  } else {
-    logger::log_threshold(logger::SUCCESS)
-  }
-}
-
 #' Check if a Value is Empty or NA
 #'
 #' Internal helper function to determine if a given value is NA or an empty string.
@@ -135,7 +121,7 @@ set_log_level <- function(verbose = FALSE) {
     # for internal use, ensure scalar input or adapt function.
     # warning(".is_empty_or_na designed for scalar input.")
     # For robustness with potential vector input from `ad$field` if it's not always scalar:
-    # return(is.na(value) | value == "") # This would be vectorized
+    # return(is.na(value) | value == "") # This would be vectorised
     # However, sticking to original intent for scalar:
     return(is.na(value[1]) || identical(value[1], ""))
   }

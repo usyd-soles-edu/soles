@@ -79,16 +79,16 @@ create_eoi_profile <- function(applicant_data) {
 
     if (is_full_day || (has_am_mention && has_pm_mention)) {
       # Covers "full day" or cases like "AM and PM", "Morning, Afternoon"
-      am_symbol <- "✓"
-      pm_symbol <- "✓"
+      am_symbol <- "\u2713"
+      pm_symbol <- "\u2713"
     } else if (has_am_mention) {
       # AM mentioned, and not PM (because previous condition was false)
-      am_symbol <- "✓"
+      am_symbol <- "\u2713"
       # pm_symbol remains "x"
     } else if (has_pm_mention) {
       # PM mentioned, and not AM (because previous conditions were false)
       # am_symbol remains "x"
-      pm_symbol <- "✓"
+      pm_symbol <- "\u2713"
     } else {
       # Not explicitly unavailable, not full day, no clear AM/PM only.
       # This is for other non-empty strings like "flexible", "by appointment".
