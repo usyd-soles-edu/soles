@@ -322,16 +322,25 @@ server <- function(input, output, session) {
     if (nrow(profile_data_filtered) == 1) {
       tryCatch(
         {
-          soles::create_eoi_profile(profile_data_filtered) # Pass the single filtered row
+          # Use new UI-optimised profile generator
+          soles::create_eoi_profile_ui(profile_data_filtered)
         },
         error = function(e) {
-          paste("Error generating profile with soles::create_eoi_profile:", e$message)
+          htmltools::HTML(paste(
+            '<div class="alert alert-danger">',
+            'Error generating profile:', e$message,
+            '</div>'
+          ))
         }
       )
     } else if (nrow(profile_data_filtered) == 0) {
-      "Selected name not found in the current data. The name list might be outdated or the name does not exist in the uploaded file."
+      htmltools::HTML(
+        '<div class="alert alert-warning">Selected name not found in the current data.</div>'
+      )
     } else {
-      "Multiple entries found for the selected name. This indicates an issue with data uniqueness or the filtering logic."
+      htmltools::HTML(
+        '<div class="alert alert-warning">Multiple entries found for the selected name.</div>'
+      )
     }
   })
 
@@ -425,16 +434,20 @@ server <- function(input, output, session) {
 
   output$profile_display_html <- shiny::renderUI({
     profile_content <- selected_profile_output()
-    if (is.character(profile_content)) {
-      # Ensure it's a single string first if it's a vector
-      profile_string <- paste(profile_content, collapse = "\n")
-      # Render markdown to HTML
-      return(shiny::markdown(profile_string))
+
+    # The new create_eoi_profile_ui() returns HTML objects directly
+    if (inherits(profile_content, "shiny.tag") ||
+      inherits(profile_content, "html")) {
+      return(profile_content)
+    } else if (is.character(profile_content)) {
+      # Handle text messages (error/warning messages)
+      return(shiny::HTML(profile_content))
     } else if (is.null(profile_content)) {
-      return(shiny::HTML("<p><em>No profile to display.</em></p>")) # Using HTML entities for <p><em>
+      return(shiny::HTML('<p><em>No profile to display.</em></p>'))
     } else {
-      # Fallback for non-character types
-      return(shiny::HTML("<p><em>Profile content is not in a displayable text format.</em></p>")) # Using HTML entities
+      return(shiny::HTML(
+        '<p><em>Profile content is not in a displayable format.</em></p>'
+      ))
     }
   })
 
