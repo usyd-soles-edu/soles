@@ -47,8 +47,6 @@ rename_soles_columns_flexible <- function(data) {
     "lead_demonstrator_interest" = c("lead.*demonstrator.*selected.*choice"),
     "lead_demonstrator_other" = c("lead.*demonstrator.*other.*text"),
     "completed_training" = c("completed.*faculty.*science.*tutor.*demonstrator.*training"),
-    "desired_hours_per_week" = c("hours.*allocated.*per.*week"),
-    "planned_years" = c("years.*planning.*work"),
     "expertise_area" = c("area.*expertise"),
     "higher_education_degrees" = c("higher.*education.*degree.*major"),
     "teaching_philosophy" = c("teaching.*philosophy"),
@@ -62,9 +60,8 @@ rename_soles_columns_flexible <- function(data) {
     "info_amendment_acknowledgment" = c("circumstances.*change.*amend.*email")
   )
 
-  # Get current column names (excluding the ones we want to remove)
-  current_cols <- names(data)
-  cols_to_keep <- current_cols[!current_cols %in% c(
+  # Define columns to exclude (vectorised operation)
+  cols_to_exclude <- c(
     "Start Date", "End Date", "Response Type",
     "IP Address", "Progress", "Duration (in seconds)",
     "Finished", "Recorded Date", "Response ID",
@@ -72,41 +69,44 @@ rename_soles_columns_flexible <- function(data) {
     "Recipient Email", "External Data Reference",
     "Location Latitude", "Location Longitude",
     "Distribution Channel", "User Language"
-  )]
+  )
 
-  # Find matches using regex patterns
-  rename_vector <- c()
-  unmatched_columns <- c()
+  # Get current column names (excluding unwanted ones)
+  current_cols <- names(data)
+  cols_to_keep <- current_cols[!current_cols %in% cols_to_exclude]
+
+  # Pre-compute lowercased column names ONCE (major optimisation)
+  cols_to_keep_lower <- tolower(cols_to_keep)
+
+  # Vectorised pattern matching
+  rename_vector <- character()
+  unmatched_columns <- character()
 
   for (new_name in names(column_mapping)) {
     pattern <- column_mapping[[new_name]]
 
-    # Find which current column matches the pattern
-    matches <- sapply(cols_to_keep, function(col) grepl(pattern, tolower(col), perl = TRUE))
+    # Use pre-lowercased columns (avoid repeated tolower calls)
+    matches <- grepl(pattern, cols_to_keep_lower, perl = TRUE)
     matching_cols <- cols_to_keep[matches]
 
     if (length(matching_cols) == 1) {
-      # Correct way: new_name = old_name for rename()
       rename_vector[new_name] <- matching_cols
     } else if (length(matching_cols) > 1) {
-      # If multiple matches, take the first one and warn
+      # Take first match and warn
       rename_vector[new_name] <- matching_cols[1]
       message(sprintf(
         "Multiple matches found for '%s': %s. Using '%s'",
         new_name, paste(matching_cols, collapse = ", "), matching_cols[1]
       ))
     } else {
-      # No matches found
       unmatched_columns <- c(unmatched_columns, new_name)
     }
   }
 
-  # Report unmatched columns
+  # Report unmatched columns (only if any exist)
   if (length(unmatched_columns) > 0) {
     message("The following expected columns were not found:")
-    for (col in unmatched_columns) {
-      message(sprintf("  - %s not found", col))
-    }
+    message(paste("  -", unmatched_columns, collapse = "\n"))
   }
 
   # Define the final columns we want to keep
@@ -116,7 +116,7 @@ rename_soles_columns_flexible <- function(data) {
     "previous_demonstrator", "previous_units", "preferred_units",
     "availability_monday", "availability_tuesday", "availability_wednesday",
     "availability_thursday", "availability_friday", "lead_demonstrator_interest",
-    "lead_demonstrator_other", "completed_training", "desired_hours_per_week",
+    "lead_demonstrator_other", "completed_training",
     "expertise_area", "higher_education_degrees", "teaching_philosophy",
     "experience_benefit", "blockout_dates"
     # Note: CV columns and acknowledgment columns are not in final_columns,
@@ -235,49 +235,39 @@ eoi_extract <- function(df) {
   if (!"preferred_units" %in% colnames(df)) {
     stop("The data frame does not contain a 'preferred_units' column.")
   }
+
   preferred_units_col <- df$preferred_units
 
   if (length(preferred_units_col) == 0) {
-    return(character(0)) # Return empty character vector for empty input
+    return(character(0))
   }
 
-  list_of_unit_vectors <- lapply(preferred_units_col, function(s) {
-    # Handle NA or effectively empty strings
-    if (is.na(s) || trimws(s) == "") {
-      return(character(0))
-    }
+  # Remove NAs and empty strings upfront (vectorised)
+  valid_entries <- preferred_units_col[!is.na(preferred_units_col) & preferred_units_col != ""]
 
-    # Split by a comma that is followed by optional whitespace and then a unit code pattern.
-    # The unit code pattern [A-Z]{4}[0-9]{4} is used in a positive lookahead.
-    # Using stringr::str_split for potentially more consistent regex handling.
-    units_after_split <- stringr::str_split(s, pattern = ",\\s*(?=[A-Z]{4}[A-Z0-9]{4})")[[1]]
+  if (length(valid_entries) == 0) {
+    return(character(0))
+  }
 
-    # Post-process each extracted string segment
-    final_segments <- vapply(units_after_split, function(segment) {
-      # Step 1: Trim whitespace
-      trimmed_once <- trimws(segment)
-      # Step 2: Remove a potential trailing comma that was a separator but not handled by split
-      # (e.g. if the string was "UNIT1 Name," - the comma is part of the segment)
-      no_trailing_comma <- sub(",$", "", trimmed_once)
-      # Step 3: Trim again to clean up (e.g. if "name , " became "name " after sub)
-      fully_cleaned <- trimws(no_trailing_comma)
-      return(fully_cleaned)
-    }, FUN.VALUE = character(1))
+  # Vectorised approach: collapse all entries, split, then unique
+  # This is MUCH faster than lapply + unlist for large datasets
+  all_units_collapsed <- paste(valid_entries, collapse = ",")
 
-    # Filter out any segments that became empty after cleaning
-    final_segments <- final_segments[final_segments != ""]
+  # Split by comma followed by optional whitespace and unit code pattern
+  units_split <- stringr::str_split(
+    all_units_collapsed,
+    pattern = ",\\s*(?=[A-Z]{4}[A-Z0-9]{4})"
+  )[[1]]
 
-    return(final_segments)
-  })
+  # Vectorised cleaning (avoid vapply in a loop)
+  units_cleaned <- trimws(units_split)
+  units_cleaned <- sub(",$", "", units_cleaned)
+  units_cleaned <- trimws(units_cleaned)
 
-  # Unlist to get a single character vector of all units
-  all_extracted_units <- unlist(list_of_unit_vectors)
+  # Remove empty strings and get unique values
+  units_final <- unique(units_cleaned[units_cleaned != ""])
 
-  # Safeguard: Remove any NAs that might have crept in (though current logic should prevent them)
-  all_extracted_units <- all_extracted_units[!is.na(all_extracted_units)]
-
-  # Return unique units
-  return(unique(all_extracted_units))
+  return(units_final)
 }
 
 
@@ -323,21 +313,28 @@ eoi_extract <- function(df) {
 #' print(length(archive_content_missing)) # Expected: 0
 #' }
 prepare_eoi <- function(processed_eoi_data, uos = NULL) {
-  logger::log_debug(sprintf(
-    "Entering prepare_eoi. Number of data frames in list: %d",
-    length(processed_eoi_data)
-  ))
+  # Lazy logging for debug messages
+  if (logger::log_threshold() <= logger::DEBUG) {
+    logger::log_debug(sprintf(
+      "Entering prepare_eoi. Number of data frames in list: %d",
+      length(processed_eoi_data)
+    ))
+  }
 
-  output_files <- list() # Initialize the list to store file path and content
+  # Pre-allocate output list
+  output_files <- list()
 
   # Filter processed_eoi_data if uos is provided and not empty
   if (!is.null(uos) && length(uos) > 0) {
-    uos_filter <- as.character(uos) # Ensure character vector
-    logger::log_info(sprintf("Filtering EOI data. Requested UOS: %s", paste(uos_filter, collapse = ", ")))
+    uos_filter <- as.character(uos)
+    logger::log_info(sprintf(
+      "Filtering EOI data. Requested UOS: %s",
+      paste(uos_filter, collapse = ", ")
+    ))
 
     original_names <- names(processed_eoi_data)
 
-    # Identify which of the requested UOS are actually present in the data
+    # Identify which requested UOS are actually present in the data
     valid_uos_to_keep <- intersect(original_names, uos_filter)
 
     # Filter the list
@@ -347,40 +344,62 @@ prepare_eoi <- function(processed_eoi_data, uos = NULL) {
     kept_names <- names(processed_eoi_data)
 
     if (length(kept_names) > 0) {
-      logger::log_debug(sprintf(
-        "Successfully filtered. Kept data for UOS: %s. Original count before filtering: %d, Count after filtering: %d.",
-        paste(kept_names, collapse = ", "),
-        length(original_names),
-        length(kept_names)
-      ))
+      if (logger::log_threshold() <= logger::DEBUG) {
+        logger::log_debug(sprintf(
+          "Filtered successfully. Kept UOS: %s (original: %d, after: %d)",
+          paste(kept_names, collapse = ", "),
+          length(original_names),
+          length(kept_names)
+        ))
+      }
     } else {
       logger::log_warn(sprintf(
-        "After filtering for requested UOS (%s), no matching data was found or kept. Original data had UOS: %s.",
+        "After filtering for UOS (%s), no matching data found. Original: %s",
         paste(uos_filter, collapse = ", "),
-        if (length(original_names) > 0) paste(original_names, collapse = ", ") else "none"
+        if (length(original_names) > 0) {
+          paste(original_names, collapse = ", ")
+        } else {
+          "none"
+        }
       ))
     }
 
-    # Log any requested UOS that were not found in the original data
+    # Log any requested UOS not found in original data
     requested_but_not_in_original <- setdiff(uos_filter, original_names)
     if (length(requested_but_not_in_original) > 0) {
       logger::log_warn(sprintf(
-        "The following requested UOS were not found in the original 'processed_eoi_data' list: %s",
+        "Requested UOS not found: %s",
         paste(requested_but_not_in_original, collapse = ", ")
       ))
     }
   }
 
   if (length(processed_eoi_data) > 0) {
-    logger::log_info(sprintf("Starting to process %d data frame(s) for in-memory representation.", length(processed_eoi_data)))
+    logger::log_info(sprintf(
+      "Processing %d data frame(s) for in-memory representation",
+      length(processed_eoi_data)
+    ))
 
     for (unit_name in names(processed_eoi_data)) {
       df_to_save <- processed_eoi_data[[unit_name]]
-      logger::log_debug(sprintf("Processing unit for in-memory representation: '%s'", unit_name))
 
+      if (logger::log_threshold() <= logger::DEBUG) {
+        logger::log_debug(sprintf(
+          "Processing unit for in-memory representation: '%s'",
+          unit_name
+        ))
+      }
+
+      # Sanitise unit name for file paths
       sanitized_unit_name <- gsub("[^A-Za-z0-9_.-]+", "_", unit_name)
       sanitized_unit_name <- gsub("^_+|_+$", "", sanitized_unit_name)
-      logger::log_debug(sprintf("Sanitized unit name: '%s' (from original: '%s')", sanitized_unit_name, unit_name))
+
+      if (logger::log_threshold() <= logger::DEBUG) {
+        logger::log_debug(sprintf(
+          "Sanitised unit name: '%s' (from: '%s')",
+          sanitized_unit_name, unit_name
+        ))
+      }
 
       if (nchar(sanitized_unit_name) == 0) {
         logger::log_warn(sprintf("Sanitized unit name for '%s' is empty. Using 'unnamed_unit'.", unit_name))
@@ -389,52 +408,108 @@ prepare_eoi <- function(processed_eoi_data, uos = NULL) {
 
       if (nrow(df_to_save) > 0) {
         # Construct the relative path for the zip archive
-        relative_file_path <- paste(sanitized_unit_name, paste0(sanitized_unit_name, "_data.csv"), sep = "/")
-        logger::log_debug(sprintf("Intended relative path in archive: %s", relative_file_path))
+        relative_file_path <- paste(
+          sanitized_unit_name,
+          paste0(sanitized_unit_name, "_data.csv"),
+          sep = "/"
+        )
+
+        if (logger::log_threshold() <= logger::DEBUG) {
+          logger::log_debug(sprintf(
+            "Intended relative path in archive: %s",
+            relative_file_path
+          ))
+        }
 
         tryCatch(
           {
             csv_content <- readr::format_csv(df_to_save)
-            output_files[[length(output_files) + 1]] <- list(path = relative_file_path, content = csv_content)
-            logger::log_info(sprintf("Generated CSV content for unit '%s' (%d rows) for path: %s", unit_name, nrow(df_to_save), relative_file_path))
+            output_files[[length(output_files) + 1]] <- list(
+              path = relative_file_path,
+              content = csv_content
+            )
+
+            logger::log_info(sprintf(
+              "Generated CSV for unit '%s' (%d rows): %s",
+              unit_name, nrow(df_to_save), relative_file_path
+            ))
           },
           error = function(e) {
-            logger::log_error(sprintf("Failed to generate CSV content for unit %s for path %s: %s", unit_name, relative_file_path, e$message))
-            warning(sprintf("Failed to generate CSV content for unit %s for path %s. Error: %s", unit_name, relative_file_path, e$message))
-            # Continue to next unit if an error occurs for the current one
+            logger::log_error(sprintf(
+              "Failed to generate CSV for unit %s: %s",
+              unit_name, e$message
+            ))
+            warning(sprintf(
+              "Failed to generate CSV for unit %s. Error: %s",
+              unit_name, e$message
+            ))
           }
         )
       } else {
-        logger::log_info(sprintf("No data to process for unit '%s' (as '%s') - data frame is empty. Skipping content generation.", unit_name, sanitized_unit_name))
+        logger::log_info(sprintf(
+          "No data for unit '%s' - data frame is empty. Skipping.",
+          unit_name
+        ))
       }
       # Generate and add unit summary file
-      logger::log_debug(sprintf("Generating summary for unit: '%s'", unit_name))
-      # Define path structure first, using sanitized_unit_name for the folder.
-      # The filename for the summary should be "summary.md".
+      if (logger::log_threshold() <= logger::DEBUG) {
+        logger::log_debug(sprintf(
+          "Generating summary for unit: '%s'",
+          unit_name
+        ))
+      }
+
+      # Define path structure first, using sanitized_unit_name for folder
       summary_file_path <- paste(sanitized_unit_name, "summary.md", sep = "/")
 
       tryCatch(
         {
-          # Call soles::generate_unit_summary with the full processed_eoi_data (as elist)
-          # and the current unit_name from the loop.
-          summary_content <- soles::generate_unit_summary(elist = processed_eoi_data, unit_name = unit_name)
+          # OPTIMISATION: Pass only the current unit's data instead of full list
+          # generate_unit_summary can work with a single-element list
+          unit_data_list <- list()
+          unit_data_list[[unit_name]] <- df_to_save
 
-          # Append the new item (list with path and content) to output_files.
-          output_files[[length(output_files) + 1]] <- list(path = summary_file_path, content = summary_content)
-          logger::log_info(sprintf("Successfully generated and added summary.md for unit '%s' at path: %s", unit_name, summary_file_path))
+          summary_content <- soles::generate_unit_summary(
+            elist = unit_data_list,
+            unit_name = unit_name
+          )
+
+          # Append the new item to output_files
+          output_files[[length(output_files) + 1]] <- list(
+            path = summary_file_path,
+            content = summary_content
+          )
+
+          logger::log_info(sprintf(
+            "Successfully generated summary.md for unit '%s' at path: %s",
+            unit_name, summary_file_path
+          ))
         },
         error = function(e) {
-          logger::log_error(sprintf("Failed to generate summary.md for unit '%s' (intended path: %s): %s", unit_name, summary_file_path, e$message))
-          warning(sprintf("Failed to generate summary.md for unit '%s'. Error: %s. Intended path: %s. Skipping summary for this unit.", unit_name, e$message, summary_file_path))
-          # Continue to the next unit/iteration of the loop.
+          logger::log_error(sprintf(
+            "Failed to generate summary.md for unit '%s' (path: %s): %s",
+            unit_name, summary_file_path, e$message
+          ))
+          warning(sprintf(
+            "Failed to generate summary.md for unit '%s'. Error: %s",
+            unit_name, e$message
+          ))
         }
       )
     }
-    logger::log_info("All data frames have been processed for in-memory representation.")
+    logger::log_info(
+      "All data frames have been processed for in-memory representation."
+    )
   } else {
-    logger::log_warn("The 'processed_eoi_data' input is empty. No file contents will be generated.")
+    logger::log_warn(
+      "The 'processed_eoi_data' input is empty. No file contents generated."
+    )
   }
-  logger::log_debug("Exiting prepare_eoi function.")
+
+  if (logger::log_threshold() <= logger::DEBUG) {
+    logger::log_debug("Exiting prepare_eoi function.")
+  }
+
   return(output_files)
 }
 
@@ -481,63 +556,95 @@ prepare_eoi <- function(processed_eoi_data, uos = NULL) {
 #' print(length(processed_empty_df)) # Expected: 0
 #' }
 process_eoi_data <- function(df, unit_list) {
-  logger::log_debug("Starting process_eoi_data function.")
-  logger::log_debug(sprintf("Input df has %d rows and %d columns.", nrow(df), ncol(df)))
-  if (!is.null(unit_list) && length(unit_list) > 0) {
-    logger::log_debug(sprintf("Input unit_list contains: %s", paste(unit_list, collapse = ", ")))
-  } else {
-    logger::log_debug("Input unit_list is NULL or empty.")
+  # Lazy logging - only evaluate if logger threshold allows
+  if (logger::log_threshold() <= logger::DEBUG) {
+    logger::log_debug("Starting process_eoi_data function.")
+    logger::log_debug(sprintf(
+      "Input df has %d rows and %d columns.",
+      nrow(df), ncol(df)
+    ))
+    if (!is.null(unit_list) && length(unit_list) > 0) {
+      logger::log_debug(sprintf(
+        "Input unit_list contains: %s",
+        paste(unit_list, collapse = ", ")
+      ))
+    } else {
+      logger::log_debug("Input unit_list is NULL or empty.")
+    }
   }
-
 
   # Input validation
   if (!is.data.frame(df)) {
     logger::log_error("'df' must be a data frame.")
     stop("'df' must be a data frame.")
   }
-  if (!"preferred_units" %in% colnames(df) && nrow(df) > 0) { # Check only if df not empty
-    logger::log_error("The data frame 'df' does not contain a 'preferred_units' column.")
+  if (!"preferred_units" %in% colnames(df) && nrow(df) > 0) {
+    logger::log_error(
+      "The data frame 'df' does not contain a 'preferred_units' column."
+    )
     stop("The data frame 'df' does not contain a 'preferred_units' column.")
   }
-  if (!is.character(unit_list) && !is.null(unit_list)) { # Allow NULL unit_list
+  if (!is.character(unit_list) && !is.null(unit_list)) {
     logger::log_error("'unit_list' must be a character vector or NULL.")
     stop("'unit_list' must be a character vector or NULL.")
   }
 
-  filtered_data_frames_by_unit <- list()
-
+  # Early return for edge cases
   if (is.null(unit_list) || length(unit_list) == 0 || nrow(df) == 0) {
     if (nrow(df) == 0) {
-      logger::log_warn("The input data frame ('df') is empty. No filtering performed.")
-      # warning("The input data frame ('df') is empty. No filtering performed.") # Redundant with log
+      logger::log_warn(
+        "The input data frame ('df') is empty. No filtering performed."
+      )
     }
     if (is.null(unit_list) || length(unit_list) == 0) {
-      logger::log_warn("The 'unit_list' vector is NULL or empty. No units to filter by.")
-      # warning("The 'unit_list' vector is NULL or empty. No units to filter by.") # Redundant with log
+      logger::log_warn(
+        "The 'unit_list' vector is NULL or empty. No units to filter by."
+      )
     }
     logger::log_info("Returning empty list as no filtering can be done.")
-    return(filtered_data_frames_by_unit) # Return directly, not invisibly
+    return(list())
   }
 
+  # MAJOR OPTIMISATION: Pre-process preferred_units ONCE
+  # Convert NAs to empty strings (vectorised, done once not per-unit)
+  preferred_units_clean <- ifelse(
+    is.na(df$preferred_units),
+    "",
+    df$preferred_units
+  )
+
   logger::log_info("Starting to filter data by unit list.")
-  filtered_data_frames_by_unit <- lapply(unit_list, function(unit_name) {
-    logger::log_debug(sprintf("Filtering for unit: %s", unit_name))
-    # Ensure preferred_units exists before trying to access it
-    if ("preferred_units" %in% names(df)) {
-      preferred_units_no_na <- ifelse(is.na(df$preferred_units), "", df$preferred_units)
-      matching_rows_indices <- grepl(unit_name, preferred_units_no_na, fixed = TRUE)
-      filtered_df_for_unit <- df[matching_rows_indices, , drop = FALSE]
-      logger::log_debug(sprintf("Found %d applicants for unit: %s", nrow(filtered_df_for_unit), unit_name))
-      return(filtered_df_for_unit)
-    } else {
-      # Should not happen if initial checks are robust, but as a safeguard
-      logger::log_warn(sprintf("Column 'preferred_units' not found while filtering for unit %s. Returning empty data frame for this unit.", unit_name))
-      return(df[0, , drop = FALSE]) # Return empty df structure
-    }
-  })
+
+  # Use vectorised approach with named list pre-allocation
+  filtered_data_frames_by_unit <- vector("list", length(unit_list))
   names(filtered_data_frames_by_unit) <- unit_list
+
+  for (i in seq_along(unit_list)) {
+    unit_name <- unit_list[i]
+
+    if (logger::log_threshold() <= logger::DEBUG) {
+      logger::log_debug(sprintf("Filtering for unit: %s", unit_name))
+    }
+
+    # Use pre-cleaned preferred_units (avoid repeated ifelse calls)
+    matching_rows <- grepl(unit_name, preferred_units_clean, fixed = TRUE)
+    filtered_df <- df[matching_rows, , drop = FALSE]
+
+    if (logger::log_threshold() <= logger::DEBUG) {
+      logger::log_debug(sprintf(
+        "Found %d applicants for unit: %s",
+        nrow(filtered_df), unit_name
+      ))
+    }
+
+    filtered_data_frames_by_unit[[i]] <- filtered_df
+  }
+
   logger::log_info("Finished filtering data by unit list.")
 
-  logger::log_debug("Exiting process_eoi_data function.")
-  return(filtered_data_frames_by_unit) # Return the processed data directly
+  if (logger::log_threshold() <= logger::DEBUG) {
+    logger::log_debug("Exiting process_eoi_data function.")
+  }
+
+  return(filtered_data_frames_by_unit)
 }
