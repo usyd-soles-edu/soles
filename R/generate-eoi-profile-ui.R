@@ -171,17 +171,15 @@ create_eoi_profile_ui <- function(applicant_data) {
   })
 
   avail_html <- paste0(
-    '<div class="mb-3">',
     '<h6 class="text-muted mb-2">Availability</h6>',
     '<table class="table table-sm table-borderless mb-0">',
     '<thead><tr><th></th><th class="text-center small">AM</th><th class="text-center small">PM</th></tr></thead>',
     '<tbody>',
     paste(avail_rows, collapse = "\n"),
-    '</tbody></table>',
-    '</div>'
+    '</tbody></table>'
   )
 
-  # Background (collapsible section)
+  # Background (simple section)
   background_parts <- character()
 
   expertise_val <- get_val("expertise_area")
@@ -234,17 +232,10 @@ create_eoi_profile_ui <- function(applicant_data) {
 
   background_html <- if (length(background_parts) > 0) {
     paste0(
-      '<div class="accordion mb-3" id="backgroundAccordion">',
-      '<div class="accordion-item">',
-      '<h2 class="accordion-header">',
-      '<button class="accordion-button collapsed" type="button" ',
-      'data-bs-toggle="collapse" data-bs-target="#collapseBackground">',
-      'Additional Background',
-      '</button></h2>',
-      '<div id="collapseBackground" class="accordion-collapse collapse">',
-      '<div class="accordion-body small">',
+      '<h6 class="text-muted mb-2">Additional Background</h6>',
+      '<div class="small">',
       paste(background_parts, collapse = "\n"),
-      '</div></div></div></div>'
+      '</div>'
     )
   } else {
     ""
@@ -291,6 +282,22 @@ create_eoi_profile_ui <- function(applicant_data) {
     ""
   }
 
+  # Create two-column layout for availability and background
+  avail_background_html <- if (nzchar(background_html)) {
+    paste0(
+      '<div class="row mb-3">',
+      '<div class="col-md-4">',
+      avail_html,
+      '</div>',
+      '<div class="col-md-8">',
+      background_html,
+      '</div>',
+      '</div>'
+    )
+  } else {
+    paste0('<div class="mb-3">', avail_html, '</div>')
+  }
+
   # Combine everything into a card
   html_output <- paste0(
     '<div class="card shadow-sm">',
@@ -299,8 +306,7 @@ create_eoi_profile_ui <- function(applicant_data) {
     badges_html,
     contact_html,
     units_html,
-    avail_html,
-    background_html,
+    avail_background_html,
     details_html,
     '</div>',
     '</div>'
