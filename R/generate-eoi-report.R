@@ -268,21 +268,26 @@ generate_eoi_html_report <- function(all_applicants_data,
     name_parts <- name_parts[nzchar(name_parts)]
     full_name <- paste(name_parts, collapse = " ")
 
-    # Build badges
+    # Build badges and data attributes for filtering
     badges_html <- ""
-    if (tolower(get_val(rd, "phd_conferred")) == "yes") {
+    has_phd <- tolower(get_val(rd, "phd_conferred")) == "yes"
+    is_returning <- tolower(get_val(rd, "previous_demonstrator")) == "yes"
+    is_hdr <- tolower(get_val(rd, "hdr_student")) == "yes"
+    is_trained <- tolower(get_val(rd, "completed_training")) == "yes"
+
+    if (has_phd) {
       badges_html <- paste0(badges_html,
         '<span class="badge badge-primary">PhD</span> ')
     }
-    if (tolower(get_val(rd, "previous_demonstrator")) == "yes") {
+    if (is_returning) {
       badges_html <- paste0(badges_html,
         '<span class="badge badge-success">Returning</span> ')
     }
-    if (tolower(get_val(rd, "hdr_student")) == "yes") {
+    if (is_hdr) {
       badges_html <- paste0(badges_html,
         '<span class="badge badge-warning">HDR Student</span> ')
     }
-    if (tolower(get_val(rd, "completed_training")) == "yes") {
+    if (is_trained) {
       badges_html <- paste0(badges_html,
         '<span class="badge badge-info">Trained</span> ')
     }
@@ -306,6 +311,7 @@ generate_eoi_html_report <- function(all_applicants_data,
     # Availability summary
     days <- c("monday", "tuesday", "wednesday", "thursday", "friday")
     day_names <- c("Mon", "Tue", "Wed", "Thu", "Fri")
+    avail_count <- 0  # Count how many days they're available
     avail_icons <- sapply(seq_along(days), function(i) {
       avail_text <- tolower(trimws(get_val(
         rd, paste0("availability_", days[i]))))
@@ -315,10 +321,13 @@ generate_eoi_html_report <- function(all_applicants_data,
       } else if (avail_text == "full day" ||
                  (grepl("am|morning", avail_text) &&
                   grepl("pm|afternoon", avail_text))) {
+        avail_count <<- avail_count + 1
         return('<span class="avail-yes">✓</span>')
       } else if (grepl("am|morning", avail_text)) {
+        avail_count <<- avail_count + 0.5
         return('<span class="avail-partial">AM</span>')
       } else if (grepl("pm|afternoon", avail_text)) {
+        avail_count <<- avail_count + 0.5
         return('<span class="avail-partial">PM</span>')
       } else {
         return('<span class="avail-unknown">?</span>')
@@ -366,9 +375,13 @@ generate_eoi_html_report <- function(all_applicants_data,
                 htmltools::htmlEscape(philosophy)))
     }
 
-    # Build complete card
+    # Build complete card with data attributes for filtering
     sprintf('
-<div class="applicant-card" data-units="%s">
+<div class="applicant-card"
+     data-phd="%s"
+     data-returning="%s"
+     data-trained="%s"
+     data-availability="%.1f">
   <div class="card-header">
     <h3>%s</h3>
     <div class="badges">%s</div>
@@ -392,27 +405,18 @@ generate_eoi_html_report <- function(all_applicants_data,
     </div>
   </div>
 </div>
-    ', units_data_attr, htmltools::htmlEscape(full_name), badges_html,
+    ',
+    tolower(as.character(has_phd)),
+    tolower(as.character(is_returning)),
+    tolower(as.character(is_trained)),
+    avail_count,
+    htmltools::htmlEscape(full_name), badges_html,
     units_html, avail_html, contact_html, details_html)
   }
 
   # Generate all cards
   cards_html <- paste(apply(all_applicants_data, 1, generate_card_html),
                       collapse = "\n")
-
-  # Get all unique units for filter dropdown
-  all_units <- unique(unlist(lapply(1:nrow(all_applicants_data),
-    function(i) {
-      units_str <- all_applicants_data[i, "preferred_units"]
-      if (is.na(units_str) || units_str == "") return(character(0))
-      trimws(strsplit(as.character(units_str), ",")[[1]])
-    })))
-  all_units <- sort(all_units[nzchar(all_units)])
-
-  unit_options <- paste(sapply(all_units, function(u) {
-    sprintf('<option value="%s">%s</option>',
-            htmltools::htmlEscape(u), htmltools::htmlEscape(u))
-  }), collapse = "\n")
 
   # Create complete HTML document
   html_content <- sprintf('
@@ -557,16 +561,42 @@ generate_eoi_html_report <- function(all_applicants_data,
       <h1>%s</h1>
       <div class="filters">
         <div class="filter-group">
-          <label for="unit-filter">Filter by Unit:</label>
-          <select id="unit-filter">
-            <option value="">All Units</option>
-            %s
-          </select>
-        </div>
-        <div class="filter-group">
           <label for="search-filter">Search:</label>
           <input type="search" id="search-filter"
                  placeholder="Search names, expertise...">
+        </div>
+        <div class="filter-group">
+          <label for="phd-filter">PhD Status:</label>
+          <select id="phd-filter">
+            <option value="">All</option>
+            <option value="true">PhD Holders Only</option>
+            <option value="false">No PhD</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label for="returning-filter">Experience:</label>
+          <select id="returning-filter">
+            <option value="">All</option>
+            <option value="true">Returning Staff</option>
+            <option value="false">New Applicants</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label for="trained-filter">Training:</label>
+          <select id="trained-filter">
+            <option value="">All</option>
+            <option value="true">Trained</option>
+            <option value="false">Not Trained</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label for="availability-filter">Availability:</label>
+          <select id="availability-filter">
+            <option value="0">All</option>
+            <option value="3">3+ days</option>
+            <option value="2">2+ days</option>
+            <option value="1">1+ day</option>
+          </select>
         </div>
       </div>
       <div class="stats">
@@ -582,27 +612,38 @@ generate_eoi_html_report <- function(all_applicants_data,
 
   <script>
     const cards = document.querySelectorAll(".applicant-card");
-    const unitFilter = document.getElementById("unit-filter");
     const searchFilter = document.getElementById("search-filter");
+    const phdFilter = document.getElementById("phd-filter");
+    const returningFilter = document.getElementById("returning-filter");
+    const trainedFilter = document.getElementById("trained-filter");
+    const availabilityFilter = document.getElementById("availability-filter");
     const visibleCount = document.getElementById("visible-count");
     const totalCount = document.getElementById("total-count");
 
     totalCount.textContent = cards.length;
 
     function updateDisplay() {
-      const selectedUnit = unitFilter.value.toLowerCase();
       const searchText = searchFilter.value.toLowerCase();
+      const phdValue = phdFilter.value;
+      const returningValue = returningFilter.value;
+      const trainedValue = trainedFilter.value;
+      const minAvailability = parseFloat(availabilityFilter.value);
       let visible = 0;
 
       cards.forEach(card => {
-        const cardUnits = card.dataset.units.toLowerCase();
         const cardText = card.textContent.toLowerCase();
+        const cardPhd = card.dataset.phd;
+        const cardReturning = card.dataset.returning;
+        const cardTrained = card.dataset.trained;
+        const cardAvailability = parseFloat(card.dataset.availability);
 
-        const unitMatch = !selectedUnit ||
-          cardUnits.split(",").some(u => u.trim() === selectedUnit);
         const searchMatch = !searchText || cardText.includes(searchText);
+        const phdMatch = !phdValue || cardPhd === phdValue;
+        const returningMatch = !returningValue || cardReturning === returningValue;
+        const trainedMatch = !trainedValue || cardTrained === trainedValue;
+        const availabilityMatch = cardAvailability >= minAvailability;
 
-        if (unitMatch && searchMatch) {
+        if (searchMatch && phdMatch && returningMatch && trainedMatch && availabilityMatch) {
           card.classList.remove("hidden");
           visible++;
         } else {
@@ -613,8 +654,11 @@ generate_eoi_html_report <- function(all_applicants_data,
       visibleCount.textContent = visible;
     }
 
-    unitFilter.addEventListener("change", updateDisplay);
     searchFilter.addEventListener("input", updateDisplay);
+    phdFilter.addEventListener("change", updateDisplay);
+    returningFilter.addEventListener("change", updateDisplay);
+    trainedFilter.addEventListener("change", updateDisplay);
+    availabilityFilter.addEventListener("change", updateDisplay);
 
     // Initial display
     updateDisplay();
@@ -622,7 +666,7 @@ generate_eoi_html_report <- function(all_applicants_data,
 </body>
 </html>
   ', htmltools::htmlEscape(title), htmltools::htmlEscape(title),
-  unit_options, cards_html)
+  cards_html)
 
   # Write to file
   tryCatch({
@@ -710,10 +754,10 @@ render_eoi_profiles_to_pdf <- function(all_applicants_data,
     "    toc-depth: 1\n",
     "    number-sections: false\n",
     "    mainfont: \"Helvetica Neue\"\n",
-    "    fontsize: 11pt\n",
+    "    fontsize: 9pt\n",
     "    margin:\n",
-    "      x: 2cm\n",
-    "      y: 2cm\n",
+    "      x: 1.5cm\n",
+    "      y: 1.5cm\n",
     "---\n\n",
     "{{< pagebreak >}}\n\n",
     markdown_body
