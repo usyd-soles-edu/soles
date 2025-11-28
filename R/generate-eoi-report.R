@@ -418,8 +418,8 @@ generate_eoi_html_report <- function(all_applicants_data,
   cards_html <- paste(apply(all_applicants_data, 1, generate_card_html),
                       collapse = "\n")
 
-  # Create complete HTML document
-  html_content <- sprintf('
+  # Create complete HTML document - build in parts to avoid sprintf length limit
+  html_head <- sprintf('
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -621,7 +621,9 @@ generate_eoi_html_report <- function(all_applicants_data,
     </header>
 
     <div class="applicant-list" id="applicant-list">
-      %s
+', htmltools::htmlEscape(title), htmltools::htmlEscape(title))
+
+  html_footer <- '
     </div>
   </div>
 
@@ -728,9 +730,14 @@ generate_eoi_html_report <- function(all_applicants_data,
     updateDisplay();
   </script>
 </body>
-</html>
-  ', htmltools::htmlEscape(title), htmltools::htmlEscape(title),
-  cards_html)
+</html>'
+
+  # Combine HTML parts
+  html_content <- paste0(
+    html_head,
+    cards_html,
+    html_footer
+  )
 
   # Write to file
   tryCatch({
