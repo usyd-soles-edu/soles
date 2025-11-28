@@ -476,10 +476,12 @@ generate_eoi_html_report <- function(all_applicants_data,
       color: #666;
       font-size: 0.9em;
     }
-    .applicant-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
-      gap: 20px;
+    .applicant-list {
+      max-width: 900px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
     }
     .applicant-card {
       background: white;
@@ -561,15 +563,28 @@ generate_eoi_html_report <- function(all_applicants_data,
       <h1>%s</h1>
       <div class="filters">
         <div class="filter-group">
-          <label for="search-filter">Search:</label>
-          <input type="search" id="search-filter"
-                 placeholder="Search names, expertise...">
+          <label for="name-filter">Compare Applicants:</label>
+          <select id="name-filter" multiple size="5"
+                  style="min-width: 300px; min-height: 120px;">
+          </select>
+          <small style="color: #666; display: block; margin-top: 5px;">
+            Hold Ctrl/Cmd to select multiple for comparison
+          </small>
+        </div>
+        <div class="filter-group">
+          <label for="sort-by">Sort By:</label>
+          <select id="sort-by">
+            <option value="name">Name (A-Z)</option>
+            <option value="phd">PhD Status</option>
+            <option value="experience">Experience</option>
+            <option value="availability">Availability</option>
+          </select>
         </div>
         <div class="filter-group">
           <label for="phd-filter">PhD Status:</label>
           <select id="phd-filter">
             <option value="">All</option>
-            <option value="true">PhD Holders Only</option>
+            <option value="true">PhD Holders</option>
             <option value="false">No PhD</option>
           </select>
         </div>
@@ -577,8 +592,8 @@ generate_eoi_html_report <- function(all_applicants_data,
           <label for="returning-filter">Experience:</label>
           <select id="returning-filter">
             <option value="">All</option>
-            <option value="true">Returning Staff</option>
-            <option value="false">New Applicants</option>
+            <option value="true">Returning</option>
+            <option value="false">New</option>
           </select>
         </div>
         <div class="filter-group">
@@ -605,14 +620,16 @@ generate_eoi_html_report <- function(all_applicants_data,
       </div>
     </header>
 
-    <div class="applicant-grid" id="applicant-grid">
+    <div class="applicant-list" id="applicant-list">
       %s
     </div>
   </div>
 
   <script>
-    const cards = document.querySelectorAll(".applicant-card");
-    const searchFilter = document.getElementById("search-filter");
+    const cardContainer = document.getElementById("applicant-list");
+    const cards = Array.from(document.querySelectorAll(".applicant-card"));
+    const nameFilter = document.getElementById("name-filter");
+    const sortBy = document.getElementById("sort-by");
     const phdFilter = document.getElementById("phd-filter");
     const returningFilter = document.getElementById("returning-filter");
     const trainedFilter = document.getElementById("trained-filter");
@@ -622,8 +639,47 @@ generate_eoi_html_report <- function(all_applicants_data,
 
     totalCount.textContent = cards.length;
 
+    // Populate name filter with all applicants
+    cards.forEach(card => {
+      const name = card.querySelector("h3").textContent;
+      const option = document.createElement("option");
+      option.value = name;
+      option.textContent = name;
+      nameFilter.appendChild(option);
+    });
+
+    function sortCards() {
+      const sortValue = sortBy.value;
+      const sortedCards = [...cards].sort((a, b) => {
+        switch(sortValue) {
+          case "name":
+            const nameA = a.querySelector("h3").textContent;
+            const nameB = b.querySelector("h3").textContent;
+            return nameA.localeCompare(nameB);
+          case "phd":
+            const phdA = a.dataset.phd === "true" ? 1 : 0;
+            const phdB = b.dataset.phd === "true" ? 1 : 0;
+            return phdB - phdA;
+          case "experience":
+            const expA = a.dataset.returning === "true" ? 1 : 0;
+            const expB = b.dataset.returning === "true" ? 1 : 0;
+            return expB - expA;
+          case "availability":
+            const availA = parseFloat(a.dataset.availability);
+            const availB = parseFloat(b.dataset.availability);
+            return availB - availA;
+          default:
+            return 0;
+        }
+      });
+
+      // Re-append cards in sorted order
+      sortedCards.forEach(card => cardContainer.appendChild(card));
+    }
+
     function updateDisplay() {
-      const searchText = searchFilter.value.toLowerCase();
+      const selectedNames = Array.from(nameFilter.selectedOptions)
+        .map(opt => opt.value);
       const phdValue = phdFilter.value;
       const returningValue = returningFilter.value;
       const trainedValue = trainedFilter.value;
@@ -631,19 +687,22 @@ generate_eoi_html_report <- function(all_applicants_data,
       let visible = 0;
 
       cards.forEach(card => {
-        const cardText = card.textContent.toLowerCase();
+        const cardName = card.querySelector("h3").textContent;
         const cardPhd = card.dataset.phd;
         const cardReturning = card.dataset.returning;
         const cardTrained = card.dataset.trained;
         const cardAvailability = parseFloat(card.dataset.availability);
 
-        const searchMatch = !searchText || cardText.includes(searchText);
+        const nameMatch = selectedNames.length === 0 ||
+          selectedNames.includes(cardName);
         const phdMatch = !phdValue || cardPhd === phdValue;
-        const returningMatch = !returningValue || cardReturning === returningValue;
+        const returningMatch = !returningValue ||
+          cardReturning === returningValue;
         const trainedMatch = !trainedValue || cardTrained === trainedValue;
         const availabilityMatch = cardAvailability >= minAvailability;
 
-        if (searchMatch && phdMatch && returningMatch && trainedMatch && availabilityMatch) {
+        if (nameMatch && phdMatch && returningMatch &&
+            trainedMatch && availabilityMatch) {
           card.classList.remove("hidden");
           visible++;
         } else {
@@ -654,13 +713,18 @@ generate_eoi_html_report <- function(all_applicants_data,
       visibleCount.textContent = visible;
     }
 
-    searchFilter.addEventListener("input", updateDisplay);
+    nameFilter.addEventListener("change", updateDisplay);
+    sortBy.addEventListener("change", () => {
+      sortCards();
+      updateDisplay();
+    });
     phdFilter.addEventListener("change", updateDisplay);
     returningFilter.addEventListener("change", updateDisplay);
     trainedFilter.addEventListener("change", updateDisplay);
     availabilityFilter.addEventListener("change", updateDisplay);
 
     // Initial display
+    sortCards();
     updateDisplay();
   </script>
 </body>
