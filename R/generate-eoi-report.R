@@ -268,50 +268,24 @@ generate_eoi_html_report <- function(all_applicants_data,
     name_parts <- name_parts[nzchar(name_parts)]
     full_name <- paste(name_parts, collapse = " ")
 
-    # Build badges and data attributes for filtering
-    badges_html <- ""
+    # Get qualification data
     has_phd <- tolower(get_val(rd, "phd_conferred")) == "yes"
     is_returning <- tolower(get_val(rd, "previous_demonstrator")) == "yes"
     is_hdr <- tolower(get_val(rd, "hdr_student")) == "yes"
     is_trained <- tolower(get_val(rd, "completed_training")) == "yes"
 
-    if (has_phd) {
-      badges_html <- paste0(badges_html,
-        '<span class="badge badge-primary">PhD</span> ')
-    }
-    if (is_returning) {
-      badges_html <- paste0(badges_html,
-        '<span class="badge badge-success">Returning</span> ')
-    }
-    if (is_hdr) {
-      badges_html <- paste0(badges_html,
-        '<span class="badge badge-warning">HDR Student</span> ')
-    }
-    if (is_trained) {
-      badges_html <- paste0(badges_html,
-        '<span class="badge badge-info">Trained</span> ')
-    }
-
-    # Get units for filtering
+    # Get units
     pref_units <- get_val(rd, "preferred_units")
-    units_list <- if (nzchar(pref_units)) {
-      trimws(strsplit(pref_units, ",")[[1]])
+    units_str <- if (nzchar(pref_units)) {
+      paste(trimws(strsplit(pref_units, ",")[[1]]), collapse = ", ")
     } else {
-      character(0)
-    }
-    units_data_attr <- paste(units_list, collapse = ",")
-    units_html <- if (length(units_list) > 0) {
-      paste(sapply(units_list, function(u) {
-        sprintf('<span class="unit-badge">%s</span>', htmltools::htmlEscape(u))
-      }), collapse = " ")
-    } else {
-      "<em>No units specified</em>"
+      "None specified"
     }
 
     # Availability summary
     days <- c("monday", "tuesday", "wednesday", "thursday", "friday")
     day_names <- c("Mon", "Tue", "Wed", "Thu", "Fri")
-    avail_count <- 0  # Count how many days they're available
+    avail_count <- 0
     avail_icons <- sapply(seq_along(days), function(i) {
       avail_text <- tolower(trimws(get_val(
         rd, paste0("availability_", days[i]))))
@@ -334,74 +308,71 @@ generate_eoi_html_report <- function(all_applicants_data,
       }
     })
     avail_html <- paste(mapply(function(day, icon) {
-      sprintf('<div class="avail-day"><small>%s:</small> %s</div>',
-              day, icon)
+      sprintf('<div class="avail-day"><span>%s</span>%s</div>', day, icon)
     }, day_names, avail_icons), collapse = "")
 
-    # Contact info
+    # Contact and additional info
     email <- get_val(rd, "preferred_email")
     phone <- get_val(rd, "preferred_contact")
-    contact_html <- ""
-    if (nzchar(email)) {
-      contact_html <- paste0(contact_html,
-        sprintf('<div><strong>Email:</strong> <a href="mailto:%s">%s</a></div>',
-                htmltools::htmlEscape(email), htmltools::htmlEscape(email)))
-    }
-    if (nzchar(phone)) {
-      contact_html <- paste0(contact_html,
-        sprintf('<div><strong>Phone:</strong> %s</div>',
-                htmltools::htmlEscape(phone)))
-    }
-
-    # Additional info
     degrees <- get_val(rd, "higher_education_degrees")
     expertise <- get_val(rd, "expertise_area")
     philosophy <- get_val(rd, "teaching_philosophy")
 
-    details_html <- ""
-    if (nzchar(degrees)) {
-      details_html <- paste0(details_html,
-        sprintf('<div><strong>Education:</strong> %s</div>',
-                htmltools::htmlEscape(degrees)))
-    }
-    if (nzchar(expertise)) {
-      details_html <- paste0(details_html,
-        sprintf('<div><strong>Expertise:</strong> %s</div>',
-                htmltools::htmlEscape(expertise)))
-    }
-    if (nzchar(philosophy)) {
-      details_html <- paste0(details_html,
-        sprintf('<div class="philosophy"><strong>Teaching Philosophy:</strong> <em>%s</em></div>',
-                htmltools::htmlEscape(philosophy)))
-    }
-
-    # Build complete card with data attributes for filtering
+    # Build complete card with structured layout
     sprintf('
 <div class="applicant-card"
      data-phd="%s"
      data-returning="%s"
      data-trained="%s"
-     data-availability="%.1f">
-  <div class="card-header">
-    <h3>%s</h3>
-    <div class="badges">%s</div>
-  </div>
-  <div class="card-body">
-    <div class="section">
-      <h4>Units of Interest</h4>
-      <div class="units-list">%s</div>
+     data-hdr="%s"
+     data-availability="%.1f"
+     data-surname="%s"
+     data-given-name="%s">
+  <h3>%s</h3>
+  <div class="card-grid">
+    <div class="field">
+      <label>PhD:</label>
+      <span class="value">%s</span>
     </div>
-    <div class="section">
-      <h4>Availability</h4>
+    <div class="field">
+      <label>Returning:</label>
+      <span class="value">%s</span>
+    </div>
+    <div class="field">
+      <label>HDR Student:</label>
+      <span class="value">%s</span>
+    </div>
+    <div class="field">
+      <label>Trained:</label>
+      <span class="value">%s</span>
+    </div>
+    <div class="field full-width">
+      <label>Units of Interest:</label>
+      <span class="value">%s</span>
+    </div>
+    <div class="field full-width">
+      <label>Availability:</label>
       <div class="availability-grid">%s</div>
     </div>
-    <div class="section">
-      <h4>Contact</h4>
-      %s
+    <div class="field full-width">
+      <label>Email:</label>
+      <span class="value">%s</span>
     </div>
-    <div class="section">
-      <h4>Qualifications</h4>
-      %s
+    <div class="field full-width">
+      <label>Phone:</label>
+      <span class="value">%s</span>
+    </div>
+    <div class="field full-width">
+      <label>Education:</label>
+      <span class="value">%s</span>
+    </div>
+    <div class="field full-width">
+      <label>Expertise:</label>
+      <span class="value">%s</span>
+    </div>
+    <div class="field full-width">
+      <label>Teaching Philosophy:</label>
+      <span class="value philosophy">%s</span>
     </div>
   </div>
 </div>
@@ -409,9 +380,25 @@ generate_eoi_html_report <- function(all_applicants_data,
     tolower(as.character(has_phd)),
     tolower(as.character(is_returning)),
     tolower(as.character(is_trained)),
+    tolower(as.character(is_hdr)),
     avail_count,
-    htmltools::htmlEscape(full_name), badges_html,
-    units_html, avail_html, contact_html, details_html)
+    htmltools::htmlEscape(surname),
+    htmltools::htmlEscape(given_name),
+    htmltools::htmlEscape(full_name),
+    if (has_phd) "Yes" else "No",
+    if (is_returning) "Yes" else "No",
+    if (is_hdr) "Yes" else "No",
+    if (is_trained) "Yes" else "No",
+    htmltools::htmlEscape(units_str),
+    avail_html,
+    if (nzchar(email))
+      sprintf('<a href="mailto:%s">%s</a>',
+        htmltools::htmlEscape(email), htmltools::htmlEscape(email))
+    else "Not provided",
+    if (nzchar(phone)) htmltools::htmlEscape(phone) else "Not provided",
+    if (nzchar(degrees)) htmltools::htmlEscape(degrees) else "Not provided",
+    if (nzchar(expertise)) htmltools::htmlEscape(expertise) else "Not provided",
+    if (nzchar(philosophy)) htmltools::htmlEscape(philosophy) else "Not provided")
   }
 
   # Generate all cards
@@ -419,7 +406,7 @@ generate_eoi_html_report <- function(all_applicants_data,
                       collapse = "\n")
 
   # Create complete HTML document - build in parts to avoid sprintf length limit
-  html_head <- sprintf('
+html_head <- sprintf('
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -429,179 +416,250 @@ generate_eoi_html_report <- function(all_applicants_data,
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-        "Helvetica Neue", Arial, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       background: #f5f5f5;
-      padding: 20px;
-      line-height: 1.6;
+      line-height: 1.5;
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
     }
-    .container { max-width: 1400px; margin: 0 auto; }
-    header {
+    .sidebar {
+      width: 280px;
       background: white;
-      padding: 30px;
-      border-radius: 8px;
-      margin-bottom: 30px;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      border-right: 1px solid #ddd;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
     }
-    header h1 {
+    .sidebar-header {
+      padding: 20px;
+      border-bottom: 1px solid #e0e0e0;
+      background: #f8f9fa;
+    }
+    .sidebar-header h2 {
+      font-size: 1.1em;
       color: #333;
-      margin-bottom: 20px;
-      font-size: 2em;
+      margin-bottom: 10px;
+    }
+    .select-all-container {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 0;
+      font-size: 0.9em;
+    }
+    .select-all-container input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+      cursor: pointer;
+    }
+    .applicant-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 10px;
+    }
+    .applicant-item {
+      padding: 10px 15px;
+      border-bottom: 1px solid #f0f0f0;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      transition: background 0.2s;
+    }
+    .applicant-item:hover {
+      background: #f8f9fa;
+    }
+    .applicant-item input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+      cursor: pointer;
+    }
+    .applicant-name {
+      flex: 1;
+      font-size: 0.9em;
+      color: #333;
+    }
+    .main-content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .top-bar {
+      background: white;
+      border-bottom: 1px solid #ddd;
+      padding: 20px;
+    }
+    .top-bar h1 {
+      font-size: 1.5em;
+      color: #333;
+      margin-bottom: 15px;
     }
     .filters {
       display: flex;
       gap: 15px;
       align-items: center;
       flex-wrap: wrap;
+      margin-bottom: 10px;
     }
-    .filter-group { display: flex; flex-direction: column; gap: 5px; }
+    .filter-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
     .filter-group label {
-      font-weight: 600;
       font-size: 0.9em;
       color: #555;
+      font-weight: 500;
     }
-    select, input {
-      padding: 10px 15px;
+    select {
+      padding: 6px 10px;
       border: 1px solid #ddd;
       border-radius: 4px;
-      font-size: 1em;
-      background: white;
-    }
-    select { min-width: 200px; }
-    input[type="search"] { min-width: 300px; }
-    .stats {
-      margin-top: 15px;
-      padding-top: 15px;
-      border-top: 1px solid #eee;
-      color: #666;
       font-size: 0.9em;
+      background: white;
+      cursor: pointer;
     }
-    .applicant-list {
-      max-width: 900px;
-      margin: 0 auto;
+    select:focus {
+      outline: none;
+      border-color: #007bff;
+    }
+    .stats {
+      font-size: 0.85em;
+      color: #666;
+      margin-top: 10px;
+    }
+    .cards-container {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px;
       display: flex;
       flex-direction: column;
       gap: 15px;
     }
     .applicant-card {
       background: white;
-      border-radius: 8px;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-      overflow: hidden;
-      transition: transform 0.2s, box-shadow 0.2s;
+      border: 1px solid #e0e0e0;
+      border-radius: 6px;
+      padding: 20px;
+      transition: box-shadow 0.2s;
     }
     .applicant-card:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
     }
-    .card-header {
-      padding: 20px;
-      background: linear-gradient(135deg, #667eea 0%%, #764ba2 100%%);
-      color: white;
+    .applicant-card.hidden {
+      display: none;
     }
-    .card-header h3 {
-      margin-bottom: 10px;
+    .applicant-card h3 {
+      color: #333;
       font-size: 1.3em;
+      margin-bottom: 15px;
+      padding-bottom: 10px;
+      border-bottom: 2px solid #f0f0f0;
     }
-    .badges { display: flex; gap: 8px; flex-wrap: wrap; }
-    .badge {
-      display: inline-block;
-      padding: 4px 10px;
-      border-radius: 12px;
-      font-size: 0.75em;
+    .card-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+    }
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .field.full-width {
+      grid-column: 1 / -1;
+    }
+    .field label {
+      font-size: 0.85em;
       font-weight: 600;
-      text-transform: uppercase;
-      background: rgba(255,255,255,0.2);
-    }
-    .badge-primary { background: rgba(100,150,255,0.3); }
-    .badge-success { background: rgba(100,200,100,0.3); }
-    .badge-warning { background: rgba(255,200,100,0.3); }
-    .badge-info { background: rgba(100,200,255,0.3); }
-    .card-body { padding: 20px; }
-    .section { margin-bottom: 20px; }
-    .section:last-child { margin-bottom: 0; }
-    .section h4 {
-      font-size: 0.9em;
-      color: #888;
+      color: #666;
       text-transform: uppercase;
       letter-spacing: 0.5px;
-      margin-bottom: 10px;
-      font-weight: 600;
     }
-    .unit-badge {
-      display: inline-block;
-      padding: 4px 10px;
-      margin: 2px;
-      background: #f0f0f0;
-      border-radius: 4px;
-      font-size: 0.85em;
-      font-weight: 500;
+    .field .value {
+      font-size: 0.95em;
+      color: #333;
+    }
+    .field .value.philosophy {
+      font-style: italic;
+      color: #555;
+      line-height: 1.6;
     }
     .availability-grid {
       display: flex;
-      gap: 10px;
-      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 5px;
     }
     .avail-day {
       display: flex;
+      flex-direction: column;
       align-items: center;
-      gap: 5px;
+      gap: 2px;
+      padding: 6px;
+      background: #f8f9fa;
+      border-radius: 4px;
+      font-size: 0.85em;
     }
-    .avail-yes { color: #28a745; font-weight: bold; }
-    .avail-no { color: #dc3545; }
-    .avail-partial { color: #ffc107; font-weight: bold; font-size: 0.8em; }
-    .avail-unknown { color: #6c757d; }
-    .philosophy { margin-top: 10px; font-size: 0.95em; }
-    .hidden { display: none !important; }
-    a { color: #667eea; text-decoration: none; }
-    a:hover { text-decoration: underline; }
+    .avail-day span {
+      font-weight: 600;
+      color: #666;
+    }
+    .avail-yes { color: #28a745; font-size: 1.1em; font-weight: bold; }
+    .avail-no { color: #dc3545; font-size: 1.1em; font-weight: bold; }
+    .avail-partial { color: #ffc107; font-size: 0.75em; font-weight: bold; }
+    .avail-unknown { color: #6c757d; font-size: 0.9em; }
   </style>
 </head>
 <body>
-  <div class="container">
-    <header>
+  <div class="sidebar">
+    <div class="sidebar-header">
+      <h2>Applicants</h2>
+      <div class="select-all-container">
+        <input type="checkbox" id="select-all" checked>
+        <label for="select-all">Select All</label>
+      </div>
+    </div>
+    <div class="applicant-list" id="sidebar-list">
+    </div>
+  </div>
+
+  <div class="main-content">
+    <div class="top-bar">
       <h1>%s</h1>
       <div class="filters">
         <div class="filter-group">
-          <label for="name-filter">Compare Applicants:</label>
-          <select id="name-filter" multiple size="5"
-                  style="min-width: 300px; min-height: 120px;">
-          </select>
-          <small style="color: #666; display: block; margin-top: 5px;">
-            Hold Ctrl/Cmd to select multiple for comparison
-          </small>
-        </div>
-        <div class="filter-group">
-          <label for="sort-by">Sort By:</label>
-          <select id="sort-by">
-            <option value="name">Name (A-Z)</option>
-            <option value="phd">PhD Status</option>
-            <option value="experience">Experience</option>
-            <option value="availability">Availability</option>
+          <label for="sort-order">Sort:</label>
+          <select id="sort-order">
+            <option value="surname-asc">Surname (A-Z)</option>
+            <option value="surname-desc">Surname (Z-A)</option>
+            <option value="given-asc">First Name (A-Z)</option>
+            <option value="given-desc">First Name (Z-A)</option>
           </select>
         </div>
         <div class="filter-group">
-          <label for="phd-filter">PhD Status:</label>
+          <label for="phd-filter">PhD:</label>
           <select id="phd-filter">
             <option value="">All</option>
-            <option value="true">PhD Holders</option>
-            <option value="false">No PhD</option>
+            <option value="true">Yes</option>
+            <option value="false">No</option>
           </select>
         </div>
         <div class="filter-group">
-          <label for="returning-filter">Experience:</label>
+          <label for="returning-filter">Returning:</label>
           <select id="returning-filter">
             <option value="">All</option>
-            <option value="true">Returning</option>
-            <option value="false">New</option>
+            <option value="true">Yes</option>
+            <option value="false">No</option>
           </select>
         </div>
         <div class="filter-group">
-          <label for="trained-filter">Training:</label>
+          <label for="trained-filter">Trained:</label>
           <select id="trained-filter">
             <option value="">All</option>
-            <option value="true">Trained</option>
-            <option value="false">Not Trained</option>
+            <option value="true">Yes</option>
+            <option value="false">No</option>
           </select>
         </div>
         <div class="filter-group">
@@ -618,20 +676,21 @@ generate_eoi_html_report <- function(all_applicants_data,
         Showing <strong id="visible-count">0</strong> of
         <strong id="total-count">0</strong> applicants
       </div>
-    </header>
+    </div>
 
-    <div class="applicant-list" id="applicant-list">
+    <div class="cards-container" id="cards-container">
 ', htmltools::htmlEscape(title), htmltools::htmlEscape(title))
 
-  html_footer <- '
+
+html_footer <- '
     </div>
   </div>
 
   <script>
-    const cardContainer = document.getElementById("applicant-list");
-    const cards = Array.from(document.querySelectorAll(".applicant-card"));
-    const nameFilter = document.getElementById("name-filter");
-    const sortBy = document.getElementById("sort-by");
+    const cardsContainer = document.getElementById("cards-container");
+    const sidebarList = document.getElementById("sidebar-list");
+    const selectAllCheckbox = document.getElementById("select-all");
+    const sortOrder = document.getElementById("sort-order");
     const phdFilter = document.getElementById("phd-filter");
     const returningFilter = document.getElementById("returning-filter");
     const trainedFilter = document.getElementById("trained-filter");
@@ -639,71 +698,120 @@ generate_eoi_html_report <- function(all_applicants_data,
     const visibleCount = document.getElementById("visible-count");
     const totalCount = document.getElementById("total-count");
 
+    const cards = Array.from(document.querySelectorAll(".applicant-card"));
+    const checkboxes = [];
+
     totalCount.textContent = cards.length;
 
-    // Populate name filter with all applicants
-    cards.forEach(card => {
+    // Populate sidebar with applicant checkboxes
+    cards.forEach((card, idx) => {
       const name = card.querySelector("h3").textContent;
-      const option = document.createElement("option");
-      option.value = name;
-      option.textContent = name;
-      nameFilter.appendChild(option);
+      const surname = card.dataset.surname;
+      const givenName = card.dataset.givenName;
+
+      const item = document.createElement("div");
+      item.className = "applicant-item";
+
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.id = `applicant-${idx}`;
+      checkbox.checked = true;
+      checkbox.dataset.index = idx;
+
+      const label = document.createElement("label");
+      label.htmlFor = `applicant-${idx}`;
+      label.className = "applicant-name";
+      label.textContent = name;
+      label.style.cursor = "pointer";
+
+      item.appendChild(checkbox);
+      item.appendChild(label);
+      sidebarList.appendChild(item);
+
+      checkboxes.push(checkbox);
+
+      // Click on item also toggles checkbox
+      item.addEventListener("click", (e) => {
+        if (e.target !== checkbox) {
+          checkbox.checked = !checkbox.checked;
+          updateDisplay();
+        }
+      });
+
+      checkbox.addEventListener("change", updateDisplay);
     });
 
+    // Select all functionality
+    selectAllCheckbox.addEventListener("change", () => {
+      const isChecked = selectAllCheckbox.checked;
+      checkboxes.forEach(cb => {
+        cb.checked = isChecked;
+      });
+      updateDisplay();
+    });
+
+    // Update select-all state when individual checkboxes change
+    function updateSelectAllState() {
+      const allChecked = checkboxes.every(cb => cb.checked);
+      const noneChecked = checkboxes.every(cb => !cb.checked);
+      selectAllCheckbox.checked = allChecked;
+      selectAllCheckbox.indeterminate = !allChecked && !noneChecked;
+    }
+
     function sortCards() {
-      const sortValue = sortBy.value;
+      const sortValue = sortOrder.value;
       const sortedCards = [...cards].sort((a, b) => {
+        const surnameA = a.dataset.surname.toLowerCase();
+        const surnameB = b.dataset.surname.toLowerCase();
+        const givenA = a.dataset.givenName.toLowerCase();
+        const givenB = b.dataset.givenName.toLowerCase();
+
         switch(sortValue) {
-          case "name":
-            const nameA = a.querySelector("h3").textContent;
-            const nameB = b.querySelector("h3").textContent;
-            return nameA.localeCompare(nameB);
-          case "phd":
-            const phdA = a.dataset.phd === "true" ? 1 : 0;
-            const phdB = b.dataset.phd === "true" ? 1 : 0;
-            return phdB - phdA;
-          case "experience":
-            const expA = a.dataset.returning === "true" ? 1 : 0;
-            const expB = b.dataset.returning === "true" ? 1 : 0;
-            return expB - expA;
-          case "availability":
-            const availA = parseFloat(a.dataset.availability);
-            const availB = parseFloat(b.dataset.availability);
-            return availB - availA;
+          case "surname-asc":
+            return surnameA.localeCompare(surnameB) ||
+              givenA.localeCompare(givenB);
+          case "surname-desc":
+            return surnameB.localeCompare(surnameA) ||
+              givenB.localeCompare(givenA);
+          case "given-asc":
+            return givenA.localeCompare(givenB) ||
+              surnameA.localeCompare(surnameB);
+          case "given-desc":
+            return givenB.localeCompare(givenA) ||
+              surnameB.localeCompare(surnameA);
           default:
             return 0;
         }
       });
 
       // Re-append cards in sorted order
-      sortedCards.forEach(card => cardContainer.appendChild(card));
+      sortedCards.forEach(card => cardsContainer.appendChild(card));
     }
 
     function updateDisplay() {
-      const selectedNames = Array.from(nameFilter.selectedOptions)
-        .map(opt => opt.value);
+      updateSelectAllState();
+
       const phdValue = phdFilter.value;
       const returningValue = returningFilter.value;
       const trainedValue = trainedFilter.value;
       const minAvailability = parseFloat(availabilityFilter.value);
       let visible = 0;
 
-      cards.forEach(card => {
-        const cardName = card.querySelector("h3").textContent;
+      cards.forEach((card, idx) => {
+        const checkbox = checkboxes[idx];
+        const selectedByUser = checkbox.checked;
+
         const cardPhd = card.dataset.phd;
         const cardReturning = card.dataset.returning;
         const cardTrained = card.dataset.trained;
         const cardAvailability = parseFloat(card.dataset.availability);
 
-        const nameMatch = selectedNames.length === 0 ||
-          selectedNames.includes(cardName);
         const phdMatch = !phdValue || cardPhd === phdValue;
-        const returningMatch = !returningValue ||
-          cardReturning === returningValue;
+        const returningMatch = !returningValue || cardReturning === returningValue;
         const trainedMatch = !trainedValue || cardTrained === trainedValue;
         const availabilityMatch = cardAvailability >= minAvailability;
 
-        if (nameMatch && phdMatch && returningMatch &&
+        if (selectedByUser && phdMatch && returningMatch &&
             trainedMatch && availabilityMatch) {
           card.classList.remove("hidden");
           visible++;
@@ -715,8 +823,7 @@ generate_eoi_html_report <- function(all_applicants_data,
       visibleCount.textContent = visible;
     }
 
-    nameFilter.addEventListener("change", updateDisplay);
-    sortBy.addEventListener("change", () => {
+    sortOrder.addEventListener("change", () => {
       sortCards();
       updateDisplay();
     });
@@ -731,6 +838,7 @@ generate_eoi_html_report <- function(all_applicants_data,
   </script>
 </body>
 </html>'
+
 
   # Combine HTML parts
   html_content <- paste0(
