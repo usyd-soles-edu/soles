@@ -121,10 +121,23 @@ rename_soles_columns_flexible <- function(data) {
     }
   }
 
-  # Report unmatched columns (only if any exist)
-  if (length(unmatched_columns) > 0) {
-    message("The following expected columns were not found:")
-    message(paste("  -", unmatched_columns, collapse = "\n"))
+  # Define optional columns that may not exist in all form versions
+  optional_columns <- c(
+    "hdr_student", # Only in new forms
+    "lead_demonstrator_interest", # Only in old forms
+    "lead_demonstrator_other", # Only in old forms
+    "experience_benefit", # Only in old forms
+    "suburb_postcode", # Not always required
+    "valid_visa", # Not always required
+    "staff_id", # Not always required
+    "cv_file_id", "cv_file_name", "cv_file_size", "cv_file_type" # Optional
+  )
+
+  # Report unmatched columns (only if they're not optional)
+  required_missing <- setdiff(unmatched_columns, optional_columns)
+  if (length(required_missing) > 0) {
+    message("The following required columns were not found:")
+    message(paste("  -", required_missing, collapse = "\n"))
   }
 
   # Define the final columns we want to keep
