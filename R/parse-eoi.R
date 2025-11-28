@@ -25,39 +25,54 @@
 #' }
 rename_soles_columns_flexible <- function(data) {
   # Define mapping with more specific patterns to avoid conflicts
+  # Patterns handle both old and new EOI form versions
   column_mapping <- list(
-    "worked_at_usyd" = c("worked.*university.*sydney.*previously"),
-    "staff_id" = c("staff.*id.*number.*7.*digits"),
-    "title" = c("^what.*title"),
-    "surname" = c("surname.*family.*name"),
-    "given_name" = c("given.*name"),
-    "preferred_email" = c("preferred.*email.*address"),
-    "preferred_contact" = c("preferred.*contact.*number"),
-    "suburb_postcode" = c("suburb.*post.*code"),
-    "valid_visa" = c("valid.*working.*visa.*australia"),
-    "phd_conferred" = c("phd.*conferred"),
-    "previous_demonstrator" = c("demonstrator.*with.*soles.*before"),
-    "previous_units" = c("previous.*units.*taught.*year"),
-    "preferred_units" = c("select.*units.*want.*considered"),
-    "availability_monday" = c("availability.*monday"),
-    "availability_tuesday" = c("availability.*tuesday"),
-    "availability_wednesday" = c("availability.*wednesday"),
-    "availability_thursday" = c("availability.*thursday"),
-    "availability_friday" = c("availability.*friday"),
-    "lead_demonstrator_interest" = c("lead.*demonstrator.*selected.*choice"),
-    "lead_demonstrator_other" = c("lead.*demonstrator.*other.*text"),
-    "completed_training" = c("completed.*faculty.*science.*tutor.*demonstrator.*training"),
-    "expertise_area" = c("area.*expertise"),
-    "higher_education_degrees" = c("higher.*education.*degree.*major"),
-    "teaching_philosophy" = c("teaching.*philosophy"),
-    "experience_benefit" = c("experience.*benefit.*school"),
-    "blockout_dates" = c("blockout.*dates.*not.*available"),
-    "cv_file_id" = c("cv.*id$"),
-    "cv_file_name" = c("cv.*name$"),
-    "cv_file_size" = c("cv.*size$"),
-    "cv_file_type" = c("cv.*type$"),
-    "info_acknowledgment" = c("acknowledge.*information.*true.*correct"),
-    "info_amendment_acknowledgment" = c("circumstances.*change.*amend.*email")
+    "worked_at_usyd" = paste0(
+      "worked.*university.*sydney.*previously|",
+      "employed.*casual.*academic.*soles.*before"
+    ),
+    "hdr_student" = "current.*hdr.*student.*soles",
+    "staff_id" = "staff.*id.*number.*7.*digits",
+    "title" = "^what.*title",
+    "surname" = "surname.*family.*name",
+    "given_name" = "given.*name|first.*name.*given.*name",
+    "preferred_email" = "preferred.*email.*address",
+    "preferred_contact" = "preferred.*contact.*number",
+    "suburb_postcode" = "suburb.*post.*code",
+    "valid_visa" = "valid.*working.*visa.*australia",
+    "phd_conferred" = "phd.*conferred",
+    "previous_demonstrator" = paste0(
+      "demonstrator.*with.*soles.*before|",
+      "current.*hdr.*student.*soles"
+    ),
+    "previous_units" = "previous.*units.*taught.*year",
+    "preferred_units" = "select.*units.*want.*considered",
+    "availability_monday" = "availability.*s1.*2026.*monday",
+    "availability_tuesday" = "availability.*s1.*2026.*tuesday",
+    "availability_wednesday" = "availability.*s1.*2026.*wednesday",
+    "availability_thursday" = "availability.*s1.*2026.*thursday",
+    "availability_friday" = "availability.*s1.*2026.*friday",
+    "lead_demonstrator_interest" = "lead.*demonstrator.*selected.*choice",
+    "lead_demonstrator_other" = "lead.*demonstrator.*other.*text",
+    "completed_training" = paste0(
+      "completed.*faculty.*science.*tutor.*demonstrator.*training|",
+      "previously.*completed.*faculty.*science.*tutor.*",
+      "demonstrator.*training"
+    ),
+    "expertise_area" = "area.*expertise",
+    "higher_education_degrees" = "higher.*education.*degree.*major",
+    "teaching_philosophy" = paste0(
+      "teaching.*philosophy|",
+      "200.*words.*less.*qualifications.*experience.*skills"
+    ),
+    "experience_benefit" = "experience.*benefit.*school",
+    "blockout_dates" = "blockout.*dates.*not.*available",
+    "cv_file_id" = "cv.*id$|pdf.*cv.*id$",
+    "cv_file_name" = "cv.*name$|pdf.*cv.*name$",
+    "cv_file_size" = "cv.*size$|pdf.*cv.*size$",
+    "cv_file_type" = "cv.*type$|pdf.*cv.*type$",
+    "info_acknowledgment" = "acknowledge.*information.*true.*correct",
+    "info_amendment_acknowledgment" = "circumstances.*change.*amend.*email"
   )
 
   # Define columns to exclude (vectorised operation)
@@ -111,8 +126,8 @@ rename_soles_columns_flexible <- function(data) {
 
   # Define the final columns we want to keep
   final_columns <- c(
-    "worked_at_usyd", "staff_id", "title", "surname", "given_name",
-    "preferred_email", "preferred_contact", "phd_conferred",
+    "worked_at_usyd", "hdr_student", "staff_id", "title", "surname",
+    "given_name", "preferred_email", "preferred_contact", "phd_conferred",
     "previous_demonstrator", "previous_units", "preferred_units",
     "availability_monday", "availability_tuesday", "availability_wednesday",
     "availability_thursday", "availability_friday", "lead_demonstrator_interest",

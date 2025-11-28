@@ -87,6 +87,11 @@ create_eoi_profile_ui <- function(applicant_data) {
     badges <- c(badges, '<span class="badge bg-secondary me-1">USYD Staff</span>')
   }
 
+  if (!is.null(get_val("hdr_student")) &&
+    tolower(get_val("hdr_student")) == "yes") {
+    badges <- c(badges, '<span class="badge bg-warning me-1">HDR Student</span>')
+  }
+
   badges_html <- if (length(badges) > 0) {
     paste0('<div class="mb-3">', paste(badges, collapse = ""), '</div>')
   } else {
