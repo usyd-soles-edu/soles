@@ -249,23 +249,22 @@ eoi_extract <- function(df) {
     return(character(0))
   }
 
-  # Vectorised approach: collapse all entries, split, then unique
-  # This is MUCH faster than lapply + unlist for large datasets
-  all_units_collapsed <- paste(valid_entries, collapse = ",")
+  # Vectorised approach: extract unit codes using regex pattern
+  # Unit code pattern: 4 letters followed by 4 alphanumeric characters
+  # Examples: BIOL1009, BIOL1XX7, BIOL2X11, MIMI2X02
+  # This handles units with commas in names like "MIMI2X02 Microbes, Infection"
 
-  # Split by comma followed by optional whitespace and unit code pattern
-  units_split <- stringr::str_split(
-    all_units_collapsed,
-    pattern = ",\\s*(?=[A-Z]{4}[A-Z0-9]{4})"
-  )[[1]]
+  # Combine all valid entries into single string
+  all_text <- paste(valid_entries, collapse = " ")
 
-  # Vectorised cleaning (avoid vapply in a loop)
-  units_cleaned <- trimws(units_split)
-  units_cleaned <- sub(",$", "", units_cleaned)
-  units_cleaned <- trimws(units_cleaned)
+  # Extract all unit codes using the pattern
+  # Pattern explanation: \b = word boundary, [A-Z]{4} = 4 uppercase letters,
+  # [A-Z0-9]{4} = 4 alphanumeric characters (letters or numbers)
+  unit_pattern <- "\\b[A-Z]{4}[A-Z0-9]{4}\\b"
+  units_extracted <- stringr::str_extract_all(all_text, unit_pattern)[[1]]
 
-  # Remove empty strings and get unique values
-  units_final <- unique(units_cleaned[units_cleaned != ""])
+  # Get unique unit codes
+  units_final <- unique(units_extracted)
 
   return(units_final)
 }
