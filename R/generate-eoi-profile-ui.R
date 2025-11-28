@@ -102,7 +102,7 @@ create_eoi_profile_ui <- function(applicant_data) {
     contact_parts <- c(
       contact_parts,
       sprintf(
-        '<div><small class="text-muted">✉</small> <a href="mailto:%s">%s</a></div>',
+        '<div><strong>Email:</strong> <a href="mailto:%s">%s</a></div>',
         email_val, email_val
       )
     )
@@ -112,7 +112,7 @@ create_eoi_profile_ui <- function(applicant_data) {
     contact_parts <- c(
       contact_parts,
       sprintf(
-        '<div><small class="text-muted">☎</small> %s</div>',
+        '<div><strong>Contact:</strong> %s</div>',
         phone_val
       )
     )
