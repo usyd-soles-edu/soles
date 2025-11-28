@@ -606,37 +606,47 @@ server <- function(input, output, session) {
         return()
       }
 
-      # Show initial progress notification
+      # Create progress bar
       num_units <- length(data_to_prepare)
-      progress_id <- shiny::showNotification(
-        paste(
-          "Preparing download for", num_units,
-          ifelse(num_units == 1, "unit", "units"),
-          "- generating reports..."
-        ),
-        duration = NULL,
-        type = "message"
+      progress <- shiny::Progress$new()
+      on.exit(progress$close())
+
+      progress$set(
+        message = "Generating Reports",
+        detail = paste("Processing", num_units, "units..."),
+        value = 0
       )
 
       files_to_zip <- tryCatch(
         {
-          soles::prepare_eoi(processed_eoi_data = data_to_prepare)
+          soles::prepare_eoi(
+            processed_eoi_data = data_to_prepare,
+            progress_callback = function(current, total, detail_msg) {
+              progress$set(
+                value = current / total,
+                detail = sprintf(
+                  "%s (%d/%d)",
+                  detail_msg,
+                  current,
+                  total
+                )
+              )
+            }
+          )
         },
         error = function(e) {
-          shiny::removeNotification(progress_id)
+          progress$close()
           shiny::showNotification(
             paste(
-              "Error preparing data for download (soles::prepare_eoi):",
+              "Error preparing data for download:",
               e$message
             ),
-            type = "error"
+            type = "error",
+            duration = 10
           )
           return(NULL)
         }
       )
-
-      # Remove progress notification
-      shiny::removeNotification(progress_id)
 
       if (is.null(files_to_zip) || length(files_to_zip) == 0) {
         shiny::showNotification(
@@ -647,11 +657,11 @@ server <- function(input, output, session) {
         return()
       }
 
-      # Show zipping progress
-      zip_progress_id <- shiny::showNotification(
-        paste("Creating ZIP archive with", length(files_to_zip), "files..."),
-        duration = NULL,
-        type = "message"
+      # Update progress for zipping
+      progress$set(
+        message = "Creating ZIP Archive",
+        detail = paste("Writing", length(files_to_zip), "files..."),
+        value = 1
       )
 
       temp_zip_root_dir <- tempfile(pattern = "zip_root_")
@@ -707,11 +717,11 @@ server <- function(input, output, session) {
         root = temp_zip_root_dir
       )
 
-      # Remove zipping notification and show success
-      shiny::removeNotification(zip_progress_id)
+      # Close progress and show success notification
+      progress$close()
       shiny::showNotification(
         paste(
-          "Download ready! Archive contains data and reports for",
+          "Download complete! Archive contains reports for",
           num_units, ifelse(num_units == 1, "unit", "units")
         ),
         duration = 5,

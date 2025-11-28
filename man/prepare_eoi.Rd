@@ -4,7 +4,7 @@
 \alias{prepare_eoi}
 \title{Prepare EOI Data for Archiving}
 \usage{
-prepare_eoi(processed_eoi_data, uos = NULL)
+prepare_eoi(processed_eoi_data, uos = NULL, progress_callback = NULL)
 }
 \arguments{
 \item{processed_eoi_data}{A named list of data frames. Each name is a unit
@@ -13,6 +13,10 @@ Typically the output from \code{\link{process_eoi_data}}.}
 
 \item{uos}{Optional. A character vector of unit of study codes. If provided,
 only data for these units will be processed. If NULL (default), all data is processed.}
+
+\item{progress_callback}{Optional. A function to call for progress updates.
+The function should accept two parameters: current step number and total steps.
+Useful for Shiny progress bars.}
 }
 \value{
 A list of lists. Each inner list has:

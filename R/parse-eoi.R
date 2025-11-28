@@ -312,6 +312,9 @@ eoi_extract <- function(df) {
 #'   Typically the output from \code{\link{process_eoi_data}}.
 #' @param uos Optional. A character vector of unit of study codes. If provided,
 #'   only data for these units will be processed. If NULL (default), all data is processed.
+#' @param progress_callback Optional. A function to call for progress updates.
+#'   The function should accept two parameters: current step number and total steps.
+#'   Useful for Shiny progress bars.
 #' @return A list of lists. Each inner list has:
 #'   \code{path}: Intended relative path in an archive (e.g., "UNIT_CODE/UNIT_CODE_data.csv").
 #'   \code{content}: File content (character string for text files, raw bytes for binary files).
@@ -344,7 +347,7 @@ eoi_extract <- function(df) {
 #' archive_content_missing <- prepare_eoi(mock_processed_data, uos = "PHYS1001")
 #' print(length(archive_content_missing)) # Expected: 0
 #' }
-prepare_eoi <- function(processed_eoi_data, uos = NULL) {
+prepare_eoi <- function(processed_eoi_data, uos = NULL, progress_callback = NULL) {
   # Lazy logging for debug messages
   if (logger::log_threshold() <= logger::DEBUG) {
     logger::log_debug(sprintf(
@@ -412,8 +415,22 @@ prepare_eoi <- function(processed_eoi_data, uos = NULL) {
       length(processed_eoi_data)
     ))
 
+    # Calculate total steps for progress (4 files per unit: CSV, MD, HTML, PDF)
+    total_units <- length(processed_eoi_data)
+    current_unit <- 0
+
     for (unit_name in names(processed_eoi_data)) {
+      current_unit <- current_unit + 1
       df_to_save <- processed_eoi_data[[unit_name]]
+
+      # Call progress callback if provided
+      if (!is.null(progress_callback)) {
+        progress_callback(
+          current_unit,
+          total_units,
+          paste("Processing", unit_name)
+        )
+      }
 
       if (logger::log_threshold() <= logger::DEBUG) {
         logger::log_debug(sprintf(
