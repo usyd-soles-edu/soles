@@ -558,19 +558,22 @@ prepare_eoi <- function(processed_eoi_data, uos = NULL, progress_callback = NULL
 
       tryCatch(
         {
-          # Create temporary file for HTML generation
+          # Generate HTML directly in memory without temp file
           temp_html <- tempfile(fileext = ".html")
-          on.exit(unlink(temp_html), add = TRUE)
 
-          # Generate HTML report using existing function
+          # Generate HTML report
           soles::generate_eoi_html_report(
             all_applicants_data = df_to_save,
             output_html_path = temp_html,
             title = paste("EOI Applicant Report -", unit_name)
           )
 
-          # Read the generated HTML file
-          html_content <- paste(readLines(temp_html, warn = FALSE), collapse = "\n")
+          # Read using readBin for better performance
+          html_content <- rawToChar(readBin(temp_html, "raw",
+            file.info(temp_html)$size))
+
+          # Clean up immediately
+          unlink(temp_html)
 
           # Append to output_files
           output_files[[length(output_files) + 1]] <- list(
@@ -615,7 +618,6 @@ prepare_eoi <- function(processed_eoi_data, uos = NULL, progress_callback = NULL
           if (!is.null(quarto_bin)) {
             # Create temporary file for PDF generation
             temp_pdf <- tempfile(fileext = ".pdf")
-            on.exit(unlink(temp_pdf), add = TRUE)
 
             # Generate PDF report using existing function
             soles::render_eoi_profiles_to_pdf(
@@ -624,8 +626,12 @@ prepare_eoi <- function(processed_eoi_data, uos = NULL, progress_callback = NULL
               title = paste("EOI Applicant Profiles -", unit_name)
             )
 
-            # Read the generated PDF file as raw bytes
-            pdf_content <- readBin(temp_pdf, "raw", file.info(temp_pdf)$size)
+            # Read the PDF file with better performance
+            pdf_size <- file.info(temp_pdf)$size
+            pdf_content <- readBin(temp_pdf, "raw", n = pdf_size)
+
+            # Clean up immediately
+            unlink(temp_pdf)
 
             # Append to output_files (store as raw bytes)
             output_files[[length(output_files) + 1]] <- list(

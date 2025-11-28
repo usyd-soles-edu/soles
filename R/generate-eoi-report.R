@@ -401,9 +401,13 @@ generate_eoi_html_report <- function(all_applicants_data,
     if (nzchar(philosophy)) htmltools::htmlEscape(philosophy) else "Not provided")
   }
 
-  # Generate all cards
-  cards_html <- paste(apply(all_applicants_data, 1, generate_card_html),
-                      collapse = "\n")
+  # Generate all cards - vectorized approach for better performance
+  n_rows <- nrow(all_applicants_data)
+  cards_list <- vector("list", n_rows)
+  for (i in seq_len(n_rows)) {
+    cards_list[[i]] <- generate_card_html(all_applicants_data[i, ])
+  }
+  cards_html <- paste(cards_list, collapse = "\n")
 
   # Create complete HTML document - build in parts to avoid sprintf length limit
 html_head <- sprintf('
@@ -847,9 +851,12 @@ html_footer <- '
     html_footer
   )
 
-  # Write to file
+  # Write to file - use writeBin for better performance with large files
   tryCatch({
-    writeLines(html_content, output_html_path, useBytes = TRUE)
+    # Convert to raw bytes for faster writing
+    con <- file(output_html_path, "wb")
+    on.exit(close(con), add = TRUE)
+    writeBin(charToRaw(html_content), con)
     message("HTML report generated: ", output_html_path)
   }, error = function(e) {
     stop(paste("Failed to write HTML report:", e$message))
@@ -906,10 +913,13 @@ render_eoi_profiles_to_pdf <- function(all_applicants_data,
     warning("No applicant data. Generating empty PDF.")
     markdown_body <- "No applicant data to display.\n"
   } else {
-    # Generate profile for each applicant
-    profiles <- lapply(1:nrow(all_applicants_data), function(i) {
-      create_eoi_profile_modern(all_applicants_data[i, , drop = FALSE])
-    })
+    # Generate profile for each applicant - preallocate for performance
+    n_applicants <- nrow(all_applicants_data)
+    profiles <- vector("list", n_applicants)
+    for (i in seq_len(n_applicants)) {
+      profiles[[i]] <- create_eoi_profile_modern(
+        all_applicants_data[i, , drop = FALSE])
+    }
 
     # Join with page breaks
     markdown_body <- paste(profiles, collapse = "\n{{< pagebreak >}}\n\n")
@@ -954,13 +964,13 @@ render_eoi_profiles_to_pdf <- function(all_applicants_data,
   on.exit(setwd(old_wd), add = TRUE)
   setwd(abs_target_dir)
 
-  # Render to PDF
+  # Render to PDF - use quiet mode for better performance
   render_result <- tryCatch({
     quarto::quarto_render(
       input = basename(temp_qmd),
       output_file = target_filename,
       as_job = FALSE,
-      quiet = FALSE
+      quiet = TRUE  # Suppress output for faster rendering
     )
 
     if (!file.exists(target_filename)) {
