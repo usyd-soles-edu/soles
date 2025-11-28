@@ -630,21 +630,41 @@ server <- function(input, output, session) {
 
         tryCatch(
           {
-            writeLines(as.character(item$content), con = full_temp_path) # Ensure content is character
+            # Check if this is a binary file (e.g., PDF)
+            if (!is.null(item$is_binary) && item$is_binary) {
+              # Write binary content (e.g., PDF)
+              writeBin(item$content, full_temp_path)
+            } else {
+              # Write text content (CSV, HTML, MD)
+              writeLines(as.character(item$content), con = full_temp_path)
+            }
             file_paths_in_archive <- c(file_paths_in_archive, item$path)
           },
           error = function(e) {
-            shiny::showNotification(paste("Error writing file", item$path, "to temporary location:", e$message), type = "error")
+            shiny::showNotification(
+              paste(
+                "Error writing file", item$path,
+                "to temporary location:", e$message
+              ),
+              type = "error"
+            )
           }
         )
       }
 
       if (length(file_paths_in_archive) == 0) {
-        shiny::showNotification("No files were successfully prepared for zipping.", type = "error")
+        shiny::showNotification(
+          "No files were successfully prepared for zipping.",
+          type = "error"
+        )
         writeLines("Failed to prepare any files for download.", file)
         return()
       }
-      zip::zip(zipfile = file, files = file_paths_in_archive, root = temp_zip_root_dir)
+      zip::zip(
+        zipfile = file,
+        files = file_paths_in_archive,
+        root = temp_zip_root_dir
+      )
     },
     contentType = "application/zip"
   )

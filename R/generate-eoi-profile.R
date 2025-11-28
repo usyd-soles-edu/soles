@@ -53,8 +53,8 @@ create_eoi_profile <- function(applicant_data) {
     stop("applicant_data must be a list or a single-row data frame.")
   }
 
-  # Helper to safely get values, using .get_val_or_default
-  get_val <- function(field_name, default_val = "N/A") {
+  # Helper to safely get values
+  get_val <- function(field_name, default_val = NULL) {
     val <- ad[[field_name]]
     .get_val_or_default(val, default_val)
   }

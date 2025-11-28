@@ -304,8 +304,8 @@ eoi_extract <- function(df) {
 #' Prepare EOI Data for Archiving
 #'
 #' Processes a list of data frames (EOI data), generating in-memory CSV content
-#' for each, along with a summary markdown file. This is suitable for creating
-#' archives without disk I/O.
+#' for each, along with summary markdown files, HTML reports, and PDF reports
+#' (if Quarto is available). This is suitable for creating archives without disk I/O.
 #'
 #' @param processed_eoi_data A named list of data frames. Each name is a unit
 #'   code, and each data frame contains the processed EOI data for that unit.
@@ -313,8 +313,10 @@ eoi_extract <- function(df) {
 #' @param uos Optional. A character vector of unit of study codes. If provided,
 #'   only data for these units will be processed. If NULL (default), all data is processed.
 #' @return A list of lists. Each inner list has:
-#'   \code{path}: Intended relative path in an archive (e.g., "UNIT_CODE/UNIT_CODE_data.csv" or "UNIT_CODE/summary.md").
-#'   \code{content}: CSV content as a character string for data files, or Markdown content for summary files.
+#'   \code{path}: Intended relative path in an archive (e.g., "UNIT_CODE/UNIT_CODE_data.csv").
+#'   \code{content}: File content (character string for text files, raw bytes for binary files).
+#'   \code{is_binary}: Logical flag indicating if content is binary (TRUE for PDFs, NULL/FALSE for text).
+#'   Files generated per unit: CSV data file, summary.md, HTML report, and PDF report (if Quarto available).
 #' @importFrom readr format_csv
 #' @importFrom logger log_info log_debug log_warn log_error
 #' @export
@@ -522,6 +524,117 @@ prepare_eoi <- function(processed_eoi_data, uos = NULL) {
           ))
           warning(sprintf(
             "Failed to generate summary.md for unit '%s'. Error: %s",
+            unit_name, e$message
+          ))
+        }
+      )
+
+      # Generate HTML report for this unit
+      if (logger::log_threshold() <= logger::DEBUG) {
+        logger::log_debug(sprintf(
+          "Generating HTML report for unit: '%s'",
+          unit_name
+        ))
+      }
+
+      html_report_path <- paste(sanitized_unit_name, paste0(sanitized_unit_name, "_report.html"), sep = "/")
+
+      tryCatch(
+        {
+          # Create temporary file for HTML generation
+          temp_html <- tempfile(fileext = ".html")
+          on.exit(unlink(temp_html), add = TRUE)
+
+          # Generate HTML report using existing function
+          soles::generate_eoi_html_report(
+            all_applicants_data = df_to_save,
+            output_html_path = temp_html,
+            title = paste("EOI Applicant Report -", unit_name)
+          )
+
+          # Read the generated HTML file
+          html_content <- paste(readLines(temp_html, warn = FALSE), collapse = "\n")
+
+          # Append to output_files
+          output_files[[length(output_files) + 1]] <- list(
+            path = html_report_path,
+            content = html_content
+          )
+
+          logger::log_info(sprintf(
+            "Successfully generated HTML report for unit '%s' at path: %s",
+            unit_name, html_report_path
+          ))
+        },
+        error = function(e) {
+          logger::log_error(sprintf(
+            "Failed to generate HTML report for unit '%s' (path: %s): %s",
+            unit_name, html_report_path, e$message
+          ))
+          warning(sprintf(
+            "Failed to generate HTML report for unit '%s'. Error: %s",
+            unit_name, e$message
+          ))
+        }
+      )
+
+      # Generate PDF report for this unit
+      if (logger::log_threshold() <= logger::DEBUG) {
+        logger::log_debug(sprintf(
+          "Generating PDF report for unit: '%s'",
+          unit_name
+        ))
+      }
+
+      pdf_report_path <- paste(sanitized_unit_name, paste0(sanitized_unit_name, "_profiles.pdf"), sep = "/")
+
+      tryCatch(
+        {
+          # Check if Quarto is available
+          quarto_bin <- tryCatch({
+            quarto::quarto_path()
+          }, error = function(e) NULL)
+
+          if (!is.null(quarto_bin)) {
+            # Create temporary file for PDF generation
+            temp_pdf <- tempfile(fileext = ".pdf")
+            on.exit(unlink(temp_pdf), add = TRUE)
+
+            # Generate PDF report using existing function
+            soles::render_eoi_profiles_to_pdf(
+              all_applicants_data = df_to_save,
+              output_pdf_path = temp_pdf,
+              title = paste("EOI Applicant Profiles -", unit_name)
+            )
+
+            # Read the generated PDF file as raw bytes
+            pdf_content <- readBin(temp_pdf, "raw", file.info(temp_pdf)$size)
+
+            # Append to output_files (store as raw bytes)
+            output_files[[length(output_files) + 1]] <- list(
+              path = pdf_report_path,
+              content = pdf_content,
+              is_binary = TRUE
+            )
+
+            logger::log_info(sprintf(
+              "Successfully generated PDF report for unit '%s' at path: %s",
+              unit_name, pdf_report_path
+            ))
+          } else {
+            logger::log_warn(sprintf(
+              "Quarto CLI not found. Skipping PDF generation for unit '%s'.",
+              unit_name
+            ))
+          }
+        },
+        error = function(e) {
+          logger::log_error(sprintf(
+            "Failed to generate PDF report for unit '%s' (path: %s): %s",
+            unit_name, pdf_report_path, e$message
+          ))
+          warning(sprintf(
+            "Failed to generate PDF report for unit '%s'. Error: %s",
             unit_name, e$message
           ))
         }

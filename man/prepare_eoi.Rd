@@ -16,13 +16,15 @@ only data for these units will be processed. If NULL (default), all data is proc
 }
 \value{
 A list of lists. Each inner list has:
-\code{path}: Intended relative path in an archive (e.g., "UNIT_CODE/UNIT_CODE_data.csv" or "UNIT_CODE/summary.md").
-\code{content}: CSV content as a character string for data files, or Markdown content for summary files.
+\code{path}: Intended relative path in an archive (e.g., "UNIT_CODE/UNIT_CODE_data.csv").
+\code{content}: File content (character string for text files, raw bytes for binary files).
+\code{is_binary}: Logical flag indicating if content is binary (TRUE for PDFs, NULL/FALSE for text).
+Files generated per unit: CSV data file, summary.md, HTML report, and PDF report (if Quarto available).
 }
 \description{
 Processes a list of data frames (EOI data), generating in-memory CSV content
-for each, along with a summary markdown file. This is suitable for creating
-archives without disk I/O.
+for each, along with summary markdown files, HTML reports, and PDF reports
+(if Quarto is available). This is suitable for creating archives without disk I/O.
 }
 \examples{
 \dontrun{
