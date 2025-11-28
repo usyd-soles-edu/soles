@@ -25,39 +25,57 @@
 #' }
 rename_soles_columns_flexible <- function(data) {
   # Define mapping with more specific patterns to avoid conflicts
+  # Patterns handle both old and new EOI form versions
   column_mapping <- list(
-    "worked_at_usyd" = c("worked.*university.*sydney.*previously"),
-    "staff_id" = c("staff.*id.*number.*7.*digits"),
-    "title" = c("^what.*title"),
-    "surname" = c("surname.*family.*name"),
-    "given_name" = c("given.*name"),
-    "preferred_email" = c("preferred.*email.*address"),
-    "preferred_contact" = c("preferred.*contact.*number"),
-    "suburb_postcode" = c("suburb.*post.*code"),
-    "valid_visa" = c("valid.*working.*visa.*australia"),
-    "phd_conferred" = c("phd.*conferred"),
-    "previous_demonstrator" = c("demonstrator.*with.*soles.*before"),
-    "previous_units" = c("previous.*units.*taught.*year"),
-    "preferred_units" = c("select.*units.*want.*considered"),
-    "availability_monday" = c("availability.*monday"),
-    "availability_tuesday" = c("availability.*tuesday"),
-    "availability_wednesday" = c("availability.*wednesday"),
-    "availability_thursday" = c("availability.*thursday"),
-    "availability_friday" = c("availability.*friday"),
-    "lead_demonstrator_interest" = c("lead.*demonstrator.*selected.*choice"),
-    "lead_demonstrator_other" = c("lead.*demonstrator.*other.*text"),
-    "completed_training" = c("completed.*faculty.*science.*tutor.*demonstrator.*training"),
-    "expertise_area" = c("area.*expertise"),
-    "higher_education_degrees" = c("higher.*education.*degree.*major"),
-    "teaching_philosophy" = c("teaching.*philosophy"),
-    "experience_benefit" = c("experience.*benefit.*school"),
-    "blockout_dates" = c("blockout.*dates.*not.*available"),
-    "cv_file_id" = c("cv.*id$"),
-    "cv_file_name" = c("cv.*name$"),
-    "cv_file_size" = c("cv.*size$"),
-    "cv_file_type" = c("cv.*type$"),
-    "info_acknowledgment" = c("acknowledge.*information.*true.*correct"),
-    "info_amendment_acknowledgment" = c("circumstances.*change.*amend.*email")
+    "worked_at_usyd" = paste0(
+      "worked.*university.*sydney.*previously|",
+      "employed.*casual.*academic.*soles.*before"
+    ),
+    "hdr_student" = "current.*hdr.*student.*soles",
+    "staff_id" = "staff.*id.*number.*7.*digits",
+    "title" = "^what.*title",
+    "surname" = "surname|family.*name",
+    "given_name" = "given.*name|first.*name.*given.*name",
+    "preferred_email" = "preferred.*email.*address",
+    "preferred_contact" = "preferred.*contact.*number",
+    "suburb_postcode" = "suburb.*post.*code",
+    "valid_visa" = "valid.*working.*visa.*australia",
+    "phd_conferred" = "phd.*conferred",
+    "previous_demonstrator" = paste0(
+      "demonstrator.*with.*soles.*before|",
+      "current.*hdr.*student.*soles"
+    ),
+    "previous_units" = "previous.*units.*taught.*year",
+    "preferred_units" = "select.*units.*want.*considered",
+    "availability_monday" = "availability.*monday",
+    "availability_tuesday" = "availability.*tuesday",
+    "availability_wednesday" = "availability.*wednesday",
+    "availability_thursday" = "availability.*thursday",
+    "availability_friday" = "availability.*friday",
+    "lead_demonstrator_interest" = "lead.*demonstrator",
+    "lead_demonstrator_other" = "lead.*demonstrator.*other",
+    "completed_training" = paste0(
+      "completed.*faculty.*science.*tutor.*demonstrator.*training|",
+      "previously.*completed.*faculty.*science.*tutor.*",
+      "demonstrator.*training"
+    ),
+    "expertise_area" = "area.*expertise",
+    "higher_education_degrees" = "higher.*education.*degree.*major",
+    "teaching_philosophy" = paste0(
+      "teaching.*philosophy|",
+      "200.*words.*less.*qualifications.*experience.*skills"
+    ),
+    "experience_benefit" = paste0(
+      "experience.*benefit.*school|",
+      "experience.*benefit.*soles"
+    ),
+    "blockout_dates" = "blockout.*dates.*not.*available",
+    "cv_file_id" = "cv.*id$|pdf.*cv.*id$",
+    "cv_file_name" = "cv.*name$|pdf.*cv.*name$",
+    "cv_file_size" = "cv.*size$|pdf.*cv.*size$",
+    "cv_file_type" = "cv.*type$|pdf.*cv.*type$",
+    "info_acknowledgment" = "acknowledge.*information.*true.*correct",
+    "info_amendment_acknowledgment" = "circumstances.*change.*amend.*email"
   )
 
   # Define columns to exclude (vectorised operation)
@@ -103,16 +121,29 @@ rename_soles_columns_flexible <- function(data) {
     }
   }
 
-  # Report unmatched columns (only if any exist)
-  if (length(unmatched_columns) > 0) {
-    message("The following expected columns were not found:")
-    message(paste("  -", unmatched_columns, collapse = "\n"))
+  # Define optional columns that may not exist in all form versions
+  optional_columns <- c(
+    "hdr_student", # Only in new forms
+    "lead_demonstrator_interest", # Only in old forms
+    "lead_demonstrator_other", # Only in old forms
+    "experience_benefit", # Only in old forms
+    "suburb_postcode", # Not always required
+    "valid_visa", # Not always required
+    "staff_id", # Not always required
+    "cv_file_id", "cv_file_name", "cv_file_size", "cv_file_type" # Optional
+  )
+
+  # Report unmatched columns (only if they're not optional)
+  required_missing <- setdiff(unmatched_columns, optional_columns)
+  if (length(required_missing) > 0) {
+    message("The following required columns were not found:")
+    message(paste("  -", required_missing, collapse = "\n"))
   }
 
   # Define the final columns we want to keep
   final_columns <- c(
-    "worked_at_usyd", "staff_id", "title", "surname", "given_name",
-    "preferred_email", "preferred_contact", "phd_conferred",
+    "worked_at_usyd", "hdr_student", "staff_id", "title", "surname",
+    "given_name", "preferred_email", "preferred_contact", "phd_conferred",
     "previous_demonstrator", "previous_units", "preferred_units",
     "availability_monday", "availability_tuesday", "availability_wednesday",
     "availability_thursday", "availability_friday", "lead_demonstrator_interest",
@@ -249,23 +280,22 @@ eoi_extract <- function(df) {
     return(character(0))
   }
 
-  # Vectorised approach: collapse all entries, split, then unique
-  # This is MUCH faster than lapply + unlist for large datasets
-  all_units_collapsed <- paste(valid_entries, collapse = ",")
+  # Vectorised approach: extract unit codes using regex pattern
+  # Unit code pattern: 4 letters followed by 4 alphanumeric characters
+  # Examples: BIOL1009, BIOL1XX7, BIOL2X11, MIMI2X02
+  # This handles units with commas in names like "MIMI2X02 Microbes, Infection"
 
-  # Split by comma followed by optional whitespace and unit code pattern
-  units_split <- stringr::str_split(
-    all_units_collapsed,
-    pattern = ",\\s*(?=[A-Z]{4}[A-Z0-9]{4})"
-  )[[1]]
+  # Combine all valid entries into single string
+  all_text <- paste(valid_entries, collapse = " ")
 
-  # Vectorised cleaning (avoid vapply in a loop)
-  units_cleaned <- trimws(units_split)
-  units_cleaned <- sub(",$", "", units_cleaned)
-  units_cleaned <- trimws(units_cleaned)
+  # Extract all unit codes using the pattern
+  # Pattern explanation: \b = word boundary, [A-Z]{4} = 4 uppercase letters,
+  # [A-Z0-9]{4} = 4 alphanumeric characters (letters or numbers)
+  unit_pattern <- "\\b[A-Z]{4}[A-Z0-9]{4}\\b"
+  units_extracted <- stringr::str_extract_all(all_text, unit_pattern)[[1]]
 
-  # Remove empty strings and get unique values
-  units_final <- unique(units_cleaned[units_cleaned != ""])
+  # Get unique unit codes
+  units_final <- unique(units_extracted)
 
   return(units_final)
 }
@@ -274,17 +304,22 @@ eoi_extract <- function(df) {
 #' Prepare EOI Data for Archiving
 #'
 #' Processes a list of data frames (EOI data), generating in-memory CSV content
-#' for each, along with a summary markdown file. This is suitable for creating
-#' archives without disk I/O.
+#' for each, along with summary markdown files, HTML reports, and PDF reports
+#' (if Quarto is available). This is suitable for creating archives without disk I/O.
 #'
 #' @param processed_eoi_data A named list of data frames. Each name is a unit
 #'   code, and each data frame contains the processed EOI data for that unit.
 #'   Typically the output from \code{\link{process_eoi_data}}.
 #' @param uos Optional. A character vector of unit of study codes. If provided,
 #'   only data for these units will be processed. If NULL (default), all data is processed.
+#' @param progress_callback Optional. A function to call for progress updates.
+#'   The function should accept two parameters: current step number and total steps.
+#'   Useful for Shiny progress bars.
 #' @return A list of lists. Each inner list has:
-#'   \code{path}: Intended relative path in an archive (e.g., "UNIT_CODE/UNIT_CODE_data.csv" or "UNIT_CODE/summary.md").
-#'   \code{content}: CSV content as a character string for data files, or Markdown content for summary files.
+#'   \code{path}: Intended relative path in an archive (e.g., "UNIT_CODE/UNIT_CODE_data.csv").
+#'   \code{content}: File content (character string for text files, raw bytes for binary files).
+#'   \code{is_binary}: Logical flag indicating if content is binary (TRUE for PDFs, NULL/FALSE for text).
+#'   Files generated per unit: CSV data file, summary.md, HTML report, and PDF report (if Quarto available).
 #' @importFrom readr format_csv
 #' @importFrom logger log_info log_debug log_warn log_error
 #' @export
@@ -312,7 +347,7 @@ eoi_extract <- function(df) {
 #' archive_content_missing <- prepare_eoi(mock_processed_data, uos = "PHYS1001")
 #' print(length(archive_content_missing)) # Expected: 0
 #' }
-prepare_eoi <- function(processed_eoi_data, uos = NULL) {
+prepare_eoi <- function(processed_eoi_data, uos = NULL, progress_callback = NULL) {
   # Lazy logging for debug messages
   if (logger::log_threshold() <= logger::DEBUG) {
     logger::log_debug(sprintf(
@@ -380,8 +415,22 @@ prepare_eoi <- function(processed_eoi_data, uos = NULL) {
       length(processed_eoi_data)
     ))
 
+    # Calculate total steps for progress (4 files per unit: CSV, MD, HTML, PDF)
+    total_units <- length(processed_eoi_data)
+    current_unit <- 0
+
     for (unit_name in names(processed_eoi_data)) {
+      current_unit <- current_unit + 1
       df_to_save <- processed_eoi_data[[unit_name]]
+
+      # Call progress callback if provided
+      if (!is.null(progress_callback)) {
+        progress_callback(
+          current_unit,
+          total_units,
+          paste("Processing", unit_name)
+        )
+      }
 
       if (logger::log_threshold() <= logger::DEBUG) {
         logger::log_debug(sprintf(
@@ -492,6 +541,117 @@ prepare_eoi <- function(processed_eoi_data, uos = NULL) {
           ))
           warning(sprintf(
             "Failed to generate summary.md for unit '%s'. Error: %s",
+            unit_name, e$message
+          ))
+        }
+      )
+
+      # Generate HTML report for this unit
+      if (logger::log_threshold() <= logger::DEBUG) {
+        logger::log_debug(sprintf(
+          "Generating HTML report for unit: '%s'",
+          unit_name
+        ))
+      }
+
+      html_report_path <- paste(sanitized_unit_name, paste0(sanitized_unit_name, "_report.html"), sep = "/")
+
+      tryCatch(
+        {
+          # Create temporary file for HTML generation
+          temp_html <- tempfile(fileext = ".html")
+          on.exit(unlink(temp_html), add = TRUE)
+
+          # Generate HTML report using existing function
+          soles::generate_eoi_html_report(
+            all_applicants_data = df_to_save,
+            output_html_path = temp_html,
+            title = paste("EOI Applicant Report -", unit_name)
+          )
+
+          # Read the generated HTML file
+          html_content <- paste(readLines(temp_html, warn = FALSE), collapse = "\n")
+
+          # Append to output_files
+          output_files[[length(output_files) + 1]] <- list(
+            path = html_report_path,
+            content = html_content
+          )
+
+          logger::log_info(sprintf(
+            "Successfully generated HTML report for unit '%s' at path: %s",
+            unit_name, html_report_path
+          ))
+        },
+        error = function(e) {
+          logger::log_error(sprintf(
+            "Failed to generate HTML report for unit '%s' (path: %s): %s",
+            unit_name, html_report_path, e$message
+          ))
+          warning(sprintf(
+            "Failed to generate HTML report for unit '%s'. Error: %s",
+            unit_name, e$message
+          ))
+        }
+      )
+
+      # Generate PDF report for this unit
+      if (logger::log_threshold() <= logger::DEBUG) {
+        logger::log_debug(sprintf(
+          "Generating PDF report for unit: '%s'",
+          unit_name
+        ))
+      }
+
+      pdf_report_path <- paste(sanitized_unit_name, paste0(sanitized_unit_name, "_profiles.pdf"), sep = "/")
+
+      tryCatch(
+        {
+          # Check if Quarto is available
+          quarto_bin <- tryCatch({
+            quarto::quarto_path()
+          }, error = function(e) NULL)
+
+          if (!is.null(quarto_bin)) {
+            # Create temporary file for PDF generation
+            temp_pdf <- tempfile(fileext = ".pdf")
+            on.exit(unlink(temp_pdf), add = TRUE)
+
+            # Generate PDF report using existing function
+            soles::render_eoi_profiles_to_pdf(
+              all_applicants_data = df_to_save,
+              output_pdf_path = temp_pdf,
+              title = paste("EOI Applicant Profiles -", unit_name)
+            )
+
+            # Read the generated PDF file as raw bytes
+            pdf_content <- readBin(temp_pdf, "raw", file.info(temp_pdf)$size)
+
+            # Append to output_files (store as raw bytes)
+            output_files[[length(output_files) + 1]] <- list(
+              path = pdf_report_path,
+              content = pdf_content,
+              is_binary = TRUE
+            )
+
+            logger::log_info(sprintf(
+              "Successfully generated PDF report for unit '%s' at path: %s",
+              unit_name, pdf_report_path
+            ))
+          } else {
+            logger::log_warn(sprintf(
+              "Quarto CLI not found. Skipping PDF generation for unit '%s'.",
+              unit_name
+            ))
+          }
+        },
+        error = function(e) {
+          logger::log_error(sprintf(
+            "Failed to generate PDF report for unit '%s' (path: %s): %s",
+            unit_name, pdf_report_path, e$message
+          ))
+          warning(sprintf(
+            "Failed to generate PDF report for unit '%s'. Error: %s",
             unit_name, e$message
           ))
         }
